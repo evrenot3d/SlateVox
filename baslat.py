@@ -296,8 +296,12 @@ class Setup:
         if DEMO:
             return self._demo(5, "MiLMMT-46-4B-v1.0.Q4_K_M.gguf", 2500)
         part = {"i": 0, "n": 6, "title": ""}
+        failed = []
 
         def parse(line: str):
+            if line.startswith("HATA:"):                            # modelleri_indir.py: adım başarısız
+                failed.append(f"{part['title']} ({line[5:].strip()[:120]})")
+                return
             m = re.match(r"^==>\s*(\d+)/(\d+)\s+(.*)$", line)
             if m:
                 part.update(i=int(m.group(1)) - 1, n=int(m.group(2)), title=m.group(3))
@@ -310,7 +314,9 @@ class Setup:
                 self._set(frac=(part["i"] + pct) / part["n"],
                           detail=part["title"] + (f" · {size.group(1)} / {size.group(2)}" if size else f" · %{int(pct * 100)}"))
 
-        self._cmd([VPY, "-u", BASE / "modelleri_indir.py"], parse)
+        if self._cmd([VPY, "-u", BASE / "modelleri_indir.py"], parse, check=False) != 0:
+            raise RuntimeError("İndirilemeyen: " + ("; ".join(failed) if failed else "bazı modeller")
+                               + ". İnternet bağlantınızı denetleyip yeniden deneyin.")
         return False
 
     def _demo(self, sec, name="", mb=0):

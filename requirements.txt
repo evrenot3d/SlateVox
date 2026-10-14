@@ -1,6 +1,7 @@
 numpy
 soundfile
 librosa
+audioread
 imageio-ffmpeg
 huggingface_hub
 tqdm
