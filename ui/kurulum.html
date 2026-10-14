@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>"Doğru mu Samet?" · Kurulum</title>
+<style>
+:root{--bg:#282828;--panel:#303030;--line:#3c3c3c;--text:#e8e8e8;--muted:#9a9a9a;--accent:#3b8ef3;--accent-h:#5aa0f6;--pink:#ff5fa8;--ok:#5fcf80;--err:#ff8a80}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.5 "Segoe UI",system-ui,sans-serif;user-select:none}
+.wrap{max-width:760px;margin:0 auto;padding:28px 32px;display:flex;flex-direction:column;gap:18px;min-height:100%}
+header{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
+.hero{display:flex;justify-content:center;margin:4px 0 -6px}
+.hero img{width:250px;max-width:60%;height:auto;image-rendering:auto;filter:drop-shadow(0 6px 18px rgba(0,0,0,.35))}
+header h1{margin:0;font-size:22px;font-weight:600}
+header span{color:var(--muted);font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+p{margin:0}
+.dim{color:var(--muted);font-size:13px}
+.items{display:flex;flex-direction:column;margin-top:12px;border-top:1px solid var(--line)}
+.item{display:grid;grid-template-columns:230px 1fr auto;align-items:center;gap:12px;padding:8px 2px;border-bottom:1px solid var(--line)}
+.item b{font-weight:500}
+.item i{font-style:normal;color:var(--muted);white-space:nowrap}
+.facts{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:12px;font-size:13px}
+.facts .warn{color:#f0b35a}
+.btns{display:flex;gap:10px;justify-content:flex-end;margin-top:auto}
+button{font:inherit;color:inherit;cursor:pointer;border-radius:22px;padding:9px 22px;border:1px solid var(--line);background:#3a3a3a}
+button:hover{background:#454545}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.primary:hover{background:var(--accent-h)}
+.big{display:flex;align-items:baseline;justify-content:space-between}
+.big b{font-size:30px;font-weight:600}
+.bar{height:10px;border-radius:6px;background:#1e1e1e;overflow:hidden;margin:10px 0 8px}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--pink));transition:width .4s}
+.cur{font-weight:500}
+.detail{color:var(--muted);font-size:13px;min-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.steps li{display:flex;align-items:center;gap:10px;color:var(--muted)}
+.steps li .ic{width:18px;height:18px;border-radius:50%;border:2px solid #555;flex:none;display:grid;place-items:center;font-size:11px}
+.steps li.now{color:var(--text)}
+.steps li.now .ic{border-color:var(--accent);border-top-color:transparent;animation:spin .9s linear infinite}
+.steps li.ok{color:var(--text)}
+.steps li.ok .ic{border-color:var(--ok);background:var(--ok);color:#1d1d1d}
+.steps li.ok .ic::after{content:"✓";font-weight:700}
+.steps li em{font-style:normal;font-size:12px;color:var(--muted)}
+@keyframes spin{to{transform:rotate(360deg)}}
+details{font-size:12.5px}
+summary{cursor:pointer;color:var(--muted)}
+pre{margin:8px 0 0;max-height:170px;overflow:auto;background:#1e1e1e;border:1px solid var(--line);border-radius:6px;padding:8px 10px;font:12px/1.45 Consolas,monospace;color:#bdbdbd;white-space:pre-wrap;word-break:break-all;user-select:text}
+.errbox{border-color:#6b3a3a;background:#3a2a2a}
+.errbox b{color:var(--err)}
+.okbox b{color:var(--ok);font-size:18px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero"><img src="kurulum_logo.png" alt=""></div>
+  <header>
+    <div><h1>"Doğru mu Samet?"</h1><span>İngilizce → Türkçe video dublaj · ilk kurulum</span></div>
+  </header>
+
+  <!-- giriş -->
+  <section id="vIntro" class="card">
+    <p><b>Programın çalışması için gerekli bileşenlerin bir kez indirilmesi gerekiyor.</b>
+      Bundan sonra program internete ihtiyaç duymadan, tamamen bilgisayarınızda çalışır.</p>
+    <div class="items">
+      <div class="item"><b>PyTorch</b><span class="dim">yapay zekâ altyapısı</span><i>~3 GB</i></div>
+      <div class="item" id="iCuda"><b>Ekran kartı kütüphaneleri</b><span class="dim">NVIDIA CUDA</span><i>~1 GB</i></div>
+      <div class="item"><b>Whisper Large V3 Turbo</b><span class="dim">İngilizce konuşmayı yazıya döker</span><i>~1,6 GB</i></div>
+      <div class="item"><b>MiLMMT-46 4B</b><span class="dim">Türkçe çeviri</span><i>~2,5 GB</i></div>
+      <div class="item"><b>UVR · EMA · Antalia</b><span class="dim">ses ayırma ve Türkçe sesler</span><i>~1 GB</i></div>
+      <div class="item"><b>Program kütüphaneleri</b><span class="dim">llama.cpp ve diğerleri</span><i>~1 GB</i></div>
+    </div>
+    <div class="facts">
+      <span>Toplam: <b>~10 GB</b> indirme</span>
+      <span id="fGpu"></span>
+      <span id="fDisk"></span>
+    </div>
+    <p class="dim" style="margin-top:12px">İnternet hızınıza göre 20–60 dakika sürebilir. Pencereyi kapatırsanız
+      bir sonraki açılışta kaldığı yerden devam eder.</p>
+  </section>
+
+  <!-- ilerleme -->
+  <section id="vRun" class="card" hidden>
+    <div class="big"><span class="cur" id="rCur">Hazırlanıyor…</span><b id="rPct">0%</b></div>
+    <div class="bar"><i id="rBar"></i></div>
+    <div class="detail" id="rDetail"></div>
+  </section>
+  <section id="vSteps" class="card" hidden>
+    <ul class="steps" id="steps"></ul>
+  </section>
+
+  <section id="vErr" class="card errbox" hidden>
+    <b>Kurulum tamamlanamadı</b>
+    <p id="eMsg" style="margin-top:4px"></p>
+    <p class="dim" style="margin-top:6px">Kurulu olan bileşenler korunur; yeniden denediğinizde kaldığı yerden devam eder.</p>
+  </section>
+
+  <section id="vDone" class="card okbox" hidden>
+    <b>✓ Kurulum tamamlandı</b>
+    <p class="dim" style="margin-top:4px">Program açılıyor…</p>
+  </section>
+
+  <details id="vLog" hidden><summary>Ayrıntılar</summary><pre id="log"></pre></details>
+
+  <div class="btns">
+    <button type="button" id="bLog" hidden>Günlüğü Aç</button>
+    <button type="button" class="primary" id="bGo">Bileşenleri İndir</button>
+  </div>
+</div>
+<script>
+const $ = (s) => document.querySelector(s);
+let api = null, timer = null, info = null, opened = false;
+
+function show(phase) {
+  $("#vIntro").hidden = phase !== "intro";
+  $("#vRun").hidden = $("#vSteps").hidden = !(phase === "running" || phase === "error");
+  $("#vErr").hidden = phase !== "error";
+  $("#vDone").hidden = phase !== "done";
+  $("#vLog").hidden = phase === "intro";
+  $("#bLog").hidden = phase !== "error";
+  const go = $("#bGo");
+  go.hidden = phase === "running" || phase === "done";
+  go.textContent = phase === "error" ? "Yeniden Dene" : info && info.resume ? "Kuruluma Devam Et" : "Bileşenleri İndir";
+}
+
+function render(st) {
+  show(st.phase);
+  const pct = Math.round(st.overall || 0);
+  $("#rPct").textContent = pct + "%";
+  $("#rBar").style.width = (st.overall || 0) + "%";
+  const cur = st.steps.find((s) => s.key === st.step);
+  $("#rCur").textContent = st.phase === "error" ? "Durdu" : cur ? cur.name : "Hazırlanıyor…";
+  $("#rDetail").textContent = st.detail || "";
+  $("#steps").innerHTML = st.steps.map((s) => {
+    const ok = st.done.includes(s.key) || st.skipped.includes(s.key);
+    const cls = ok ? "ok" : s.key === st.step && st.phase === "running" ? "now" : "";
+    const note = st.skipped.includes(s.key) ? " <em>· zaten kurulu</em>" : "";
+    return `<li class="${cls}"><span class="ic"></span><span>${s.name}${note}</span></li>`;
+  }).join("");
+  if (st.phase === "error") $("#eMsg").textContent = st.error || "";
+  const pre = $("#log"), atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
+  pre.textContent = (st.log || []).join("\n");
+  if (atEnd) pre.scrollTop = pre.scrollHeight;
+  if (st.phase === "done" && !opened) { opened = true; setTimeout(() => api.open_app(), 1800); }
+  if (st.phase !== "running") { clearInterval(timer); timer = null; }
+}
+
+async function poll() { try { render(await api.state()); } catch (e) { console.error(e); } }
+
+async function begin() {
+  await api.start();
+  show("running");
+  if (!timer) timer = setInterval(poll, 400);
+  poll();
+}
+
+const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+async function init() {
+  if (api) return;
+  api = window.pywebview.api;
+  info = await api.info();
+  $("#iCuda").hidden = !info.gpu;
+  $("#fGpu").innerHTML = info.gpu ? `Ekran kartı: <b>${esc(info.gpu_name)}</b>`
+    : `<span class="warn">NVIDIA ekran kartı bulunamadı — program işlemciyle çalışır, çok yavaş olur</span>`;
+  $("#fDisk").innerHTML = info.free_gb < 25
+    ? `<span class="warn">Boş alan: ${info.free_gb} GB — en az 25 GB önerilir</span>` : `Boş alan: ${info.free_gb} GB`;
+  show("intro");
+  const st = await api.state();
+  if (st.phase !== "intro") { render(st); if (st.phase === "running") timer = setInterval(poll, 400); }
+}
+
+$("#bGo").addEventListener("click", begin);
+$("#bLog").addEventListener("click", () => api.open_log());
+window.addEventListener("pywebviewready", init);
+if (window.pywebview && window.pywebview.api) init();
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# Python ortamları ve önbellek
+.venv/
+.venv-*/
+__pycache__/
+*.pyc
+
+# indirilen modeller ve çalışma dosyaları
+modeller/
+calisma/
+yedek/
+_test/
+
+# günlükler ve kişisel ölçümler
+*.log
+model_hizlari*.json
+
+# kurulum dosyası oluşturulurken indirilen Python ve çıktı
+kurulum/python/
+kurulum/cikti/
+kurulum/_py/
+kurulum/_py.zip

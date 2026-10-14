@@ -1,0 +1,24 @@
+﻿Doğru mu Samet? — İngilizce → Türkçe video dublaj
+
+Bu program hobi amaçlı, deneysel ve açık kaynaklı bir projedir. Ücretsizdir; kişisel kullanım içindir, ticari kullanıma uygun değildir.
+
+KURULUMDA NE OLUR?
+• Program dosyaları kullanıcı klasörünüze kopyalanır (yönetici izni gerekmez).
+• Program ilk açıldığında kendi ekranında "Gerekli bileşenler" sayfası çıkar.
+  "Bileşenleri İndir" dediğinizde yapay zekâ altyapısı ve modeller (yaklaşık 10 GB)
+  indirilir; ilerlemeyi o ekranda izlersiniz. İnternet hızınıza göre 20-60 dakika sürebilir.
+• Bitince program kendiliğinden açılır. Sonraki açılışlar hızlıdır ve internet gerekmez.
+
+GEREKSİNİMLER
+• Windows 10 / 11 (64 bit)
+• NVIDIA ekran kartı önerilir (en az 6-8 GB). Kart yoksa işlemciyle çalışır ama çok yavaştır.
+• En az 25 GB boş disk alanı, internet bağlantısı (yalnız ilk kurulumda).
+
+GÜVENLİK UYARISI HAKKINDA
+Bu kurulum dosyası dijital olarak imzalı değildir (imza sertifikası ücretlidir).
+Bu yüzden Windows ya da antivirüs programınız, tanımadığı yeni bir dosya olduğu için
+bir uyarı gösterebilir veya dosyayı kısa bir süre tarayabilir. Windows uyarısında
+"Ek bilgi" → "Yine de çalıştır" ile devam edebilirsiniz.
+Programın bütün kaynak kodu açıktır; dilediğiniz gibi inceleyebilirsiniz.
+
+Geliştiren: Evren TUĞ · evrtug@gmail.com · Instagram: @evrenot3d

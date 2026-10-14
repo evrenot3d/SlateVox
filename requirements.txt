@@ -1,0 +1,11 @@
+numpy
+soundfile
+librosa
+imageio-ffmpeg
+huggingface_hub
+tqdm
+faster-whisper>=1.1.0
+ema-lightning
+antalia-mini
+pywebview
+safetensors

@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>"Doğru mu Samet?"</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="titlebar">
+  <nav class="menu" id="menu">
+    <div class="mi"><button type="button" data-menu="mFile">Dosya</button>
+      <div class="drop" id="mFile">
+        <button type="button" data-act="open">Video Aç…<kbd>Ctrl O</kbd></button>
+        <button type="button" data-act="openurl">YouTube Bağlantısı…</button>
+      </div>
+    </div>
+    <div class="mi"><button type="button" data-menu="mExport">Export</button>
+      <div class="drop" id="mExport">
+        <div class="dlabel">Video</div>
+        <button type="button" data-act="export" data-kind="video">Video · MP4 (ses dahil)…</button>
+        <div class="dsep"></div>
+        <div class="dlabel">Ses · WAV</div>
+        <button type="button" data-act="export" data-kind="dub">Yalnız dublaj sesi…</button>
+        <button type="button" data-act="export" data-kind="en">Yalnız İngilizce ses…</button>
+        <button type="button" data-act="export" data-kind="bg">Yalnız arka plan sesi…</button>
+        <button type="button" data-act="export" data-kind="all">Tüm sesler (mikser ayarıyla)…</button>
+      </div>
+    </div>
+    <div class="mi"><button type="button" data-act="models" title="Modellerin ortalama çalışma hızları">Modeller</button></div>
+    <div class="mi"><button type="button" data-menu="mAbout">Hakkında</button>
+      <div class="drop" id="mAbout">
+        <button type="button" data-act="info">Bilgi</button>
+        <button type="button" data-act="update">Güncelleme</button>
+      </div>
+    </div>
+  </nav>
+  <div class="apptitle">"Doğru mu Samet?"</div>
+  <div class="titleright"><span class="chip" id="gpuChip">—</span></div>
+</header>
+
+<main class="work">
+  <section class="center">
+    <div class="canvas" id="canvas">
+      <div class="welcome" id="welcome">
+        <div class="wtitle"><div class="wname">"Doğru mu Samet?"<sup class="ver" id="verTag"></sup></div><span>İngilizce → Türkçe dublaj</span></div>
+        <p>Bir video açın ya da pencereye sürükleyip bırakın.</p>
+        <div class="wbtns">
+          <button class="btn primary" type="button" id="wOpen">Video Aç… <kbd>Ctrl O</kbd></button>
+        </div>
+        <div class="wlink">
+          <svg viewBox="0 0 24 24"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.8 1.8c1.6.4 7.8.4 7.8.4s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8z"/><path d="m10 15 5-3-5-3z" fill="currentColor"/></svg>
+          <input type="text" id="ytUrl" placeholder="YouTube bağlantısını yapıştırın" spellcheck="false" autocomplete="off">
+          <button class="btn" type="button" id="ytGo">Uygula</button>
+        </div>
+        <div class="wlinkst" id="ytState" hidden></div>
+        <div class="whint">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg>
+          MP4, MOV, WebM · uzun videolar izlerken parça parça dublajlanır
+        </div>
+      </div>
+      <video id="vid" playsinline preload="auto"></video>
+      <div class="ytbox" id="ytBox"><div id="ytPlayer"></div></div>
+      <div class="vclick" id="vClick"></div>
+      <div class="caption" id="caption"></div>
+      <div class="buffering" id="buffering" hidden>
+        <div class="spinner"></div>
+        <div class="btext" id="bufText">Dublaj hazırlanıyor…</div>
+      </div>
+      <div class="dropveil" id="dropveil">Videoyu bırakın</div>
+    </div>
+
+    <div class="transport">
+      <div class="trow">
+        <button class="ibtn play" id="playBtn" type="button" title="Oynat / Duraklat (Boşluk)" disabled>
+          <svg class="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg>
+          <svg class="i-pause" viewBox="0 0 24 24"><path d="M6 4h4.5v16H6zM13.5 4H18v16h-4.5z"/></svg>
+        </button>
+        <span class="tc" id="tCur">00:00</span>
+        <div class="seek" id="seek">
+          <div class="seek-track"></div>
+          <div class="seek-ranges" id="seekRanges"></div>
+          <div class="seek-played" id="seekPlayed"></div>
+          <div class="seek-thumb" id="seekThumb"></div>
+          <div class="rng-out" id="rngL"></div>
+          <div class="rng-out" id="rngR"></div>
+          <div class="rng-h a" id="rngA" title="Başlangıç noktası (sürükleyin)"></div>
+          <div class="rng-h b" id="rngB" title="Bitiş noktası (sürükleyin)"></div>
+        </div>
+        <span class="tc dim" id="tDur">00:00</span>
+      </div>
+      <div class="mixer" id="mixer" data-off="1">
+        <div class="ch" data-ch="dub">
+          <button class="chbtn" type="button" title="Türkçe dublaj (sessize al)">
+            <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>Türkçe
+          </button>
+          <input type="range" min="0" max="150" value="100">
+          <output>100%</output>
+        </div>
+        <div class="ch" data-ch="bg">
+          <button class="chbtn" type="button" title="Arka plan sesi (sessize al)">
+            <svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>Arka plan
+          </button>
+          <input type="range" min="0" max="150" value="100">
+          <output>100%</output>
+        </div>
+        <div class="ch" data-ch="en">
+          <button class="chbtn" type="button" title="İngilizce orijinal konuşma (sessize al)">
+            <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>İngilizce
+          </button>
+          <input type="range" min="0" max="150" value="0">
+          <output>0%</output>
+        </div>
+        <div class="ccgrp">
+          <button class="ccbtn on" id="ccBtn" type="button" title="Altyazı aç / kapat (sağ tık: altyazı ayarları)">CC</button>
+          <button class="ccmore" id="ccMore" type="button" title="Altyazı ayarları"><svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
+          <div class="ccpop" id="ccPop" hidden>
+            <div class="pophead">Altyazı ayarları</div>
+            <label class="prow">Yazı boyutu <input type="range" id="csSize" min="60" max="200" step="5"><output id="csSizeO"></output></label>
+            <label class="prow">Arka gölge <input type="checkbox" id="csShadow" class="tg"></label>
+            <label class="prow">Yazı rengi <input type="color" id="csColor"></label>
+            <label class="prow">Yazı çerçevesi <input type="checkbox" id="csStroke" class="tg"></label>
+            <label class="prow">Çerçeve rengi <input type="color" id="csStrokeColor"></label>
+            <button type="button" class="btn small" id="csReset">Varsayılana dön</button>
+          </div>
+        </div>
+        <button class="ibtn2" id="fsBtn" type="button" title="Tam ekran (F11)">
+          <svg class="i-fs" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+          <svg class="i-fsx" viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <aside class="dock">
+    <div class="rail">
+      <button type="button" class="rbtn on" data-p="pDub" title="Dublaj"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button>
+      <button type="button" class="rbtn on" data-p="pJob" title="İşlem"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg></button>
+      <button type="button" class="rbtn on" data-p="pSubs" title="Altyazı"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 13h4M13 13h4M7 16h10"/></svg></button>
+    </div>
+    <div class="panels">
+      <!-- Dublaj -->
+      <div class="panel" id="pDub">
+        <div class="ptabs">
+          <button type="button" class="ptab on">Dublaj</button>
+          <span class="psum" id="dubSummary"></span>
+          <button type="button" class="pmenu" id="dubFold" title="Daralt / genişlet"><svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
+        </div>
+        <div class="pbody" id="dubBody">
+          <div class="field">
+            <label>Mod</label>
+            <div class="seg" id="modeSeg">
+              <button type="button" data-m="hizli">Hızlı</button>
+              <button type="button" data-m="detayli">Detaylı</button>
+            </div>
+          </div>
+          <div class="field" id="voiceField">
+            <label>Ses</label>
+            <div class="voices">
+              <button type="button" class="voice" data-g="kadin"><b>Kadın</b><small>EMA Lightning</small></button>
+              <button type="button" class="voice" data-g="oto" title="Kadın / erkek ayrılır: kadınları EMA Lightning, erkekleri Antalia-2 Mini okur"><b>Otomatik</b><small>kadın + erkek</small></button>
+              <button type="button" class="voice" data-g="erkek"><b>Erkek</b><small>Antalia-2 Mini</small></button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Çalışacak modeller</label>
+            <div class="models" id="modelList"></div>
+          </div>
+          <div class="field" id="voxField" hidden>
+            <label>VoxCPM2 adım sayısı</label>
+            <div class="steps" id="voxSteps">
+              <button type="button" data-s="5"><b>5</b><em>hızlı</em></button>
+              <button type="button" data-s="10"><b>10</b><em>önerilen</em></button>
+              <button type="button" data-s="20" class="slow"><b>20</b><em>yavaş</em></button>
+              <button type="button" data-s="30" class="slow"><b>30</b><em>yavaş</em></button>
+            </div>
+            <div class="bnote" id="voxNote">Az adım dublajı hızlandırır, çok adım sesi daha doğal ve ayrıntılı yapar.</div>
+          </div>
+          <div class="field" id="rangeRow" hidden>
+            <label>Dublajlanacak aralık</label>
+            <div class="rangebox"><span id="rangeTxt"></span><button type="button" class="btn small" id="rangeAll" hidden>Tümü</button></div>
+            <div class="bnote">Oynatma çubuğundaki başlangıç / bitiş tutamaçlarını sürükleyerek seçin.</div>
+          </div>
+          <div class="field" id="bufField">
+            <label class="tgrow" title="Açık: ilk parça hazır olunca oynar, sonrakiler siz izlerken hazırlanır">Buffering<input type="checkbox" id="bufTg" class="tg"></label>
+            <div class="lenrow" id="lenRow" title="Her parçanın süresi: en az 1, en çok 5 dakika. Parçalar cümle ortasından bölünmez.">
+              <span>Parça süresi</span>
+              <input type="range" id="bufLen" min="60" max="300" step="15" value="90">
+              <output id="bufLenO">1:30</output>
+            </div>
+            <div class="bnote" id="bufNote"></div>
+          </div>
+          <div class="gorow">
+            <button class="btn primary" id="goBtn" type="button" disabled>Dublajı Başlat</button>
+            <span class="eta" id="goEta" hidden></span>
+          </div>
+          <div class="hint" id="goHint">Önce bir video açın</div>
+        </div>
+      </div>
+
+      <!-- İşlem -->
+      <div class="panel" id="pJob" hidden>
+        <div class="ptabs">
+          <button type="button" class="ptab on">İşlem</button>
+          <span class="psum" id="jobSummary"></span>
+          <button type="button" class="pstop" id="stopBtn" hidden title="İşlemi durdur"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>Durdur</button>
+        </div>
+        <div class="pbody">
+          <div class="chunkmap" id="chunkMap"></div>
+          <div class="stages" id="stages"></div>
+        </div>
+      </div>
+
+      <!-- Sesler (Detaylı, dublaj bitince) -->
+      <div class="panel" id="pVoices" hidden>
+        <div class="ptabs">
+          <button type="button" class="ptab on">Sesler</button>
+          <span class="psum" id="voiceSum"></span>
+        </div>
+        <div class="pbody vbody"></div>
+      </div>
+
+      <!-- Altyazı -->
+      <div class="panel grow" id="pSubs">
+        <div class="ptabs">
+          <button type="button" class="ptab on" data-lang="tr">Türkçe</button>
+          <button type="button" class="ptab" data-lang="en">İngilizce</button>
+        </div>
+        <div class="sublist" id="subList"><div class="empty">Dublaj hazırlandıkça metin burada video ile birlikte akar.</div></div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<footer class="statusbar">
+  <span id="sbLeft">Video yok</span>
+  <span id="sbRight"></span>
+</footer>
+
+<input type="file" id="fileInput" accept="video/*,.mkv" hidden>
+<div class="toast" id="toast"></div>
+<div class="modal" id="modal" hidden>
+  <div class="mbox">
+    <div class="mhead"><span id="mTitle"></span><button type="button" class="pmenu" id="mClose" title="Kapat"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+    <div class="mbody" id="mBody"></div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
