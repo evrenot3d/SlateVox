@@ -16,6 +16,13 @@ os.environ.setdefault("HF_HOME", str(BASE / "modeller" / "hf"))
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 sys.path.insert(0, str(BASE))
 
+if os.name == "nt":                                  # eksik DLL'lerde Windows hata penceresi açılmasın (hata günlüğe düşer)
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002 | 0x8000)
+    except Exception:
+        pass
+
 
 def ensure_ffmpeg_on_path() -> None:
     """audio-separator 'ffmpeg' komutunu PATH'te arar; imageio-ffmpeg'i oraya kopyalar."""

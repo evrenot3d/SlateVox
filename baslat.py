@@ -24,6 +24,7 @@ VENV = BASE / ".venv"
 VPY = VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 VPYW = VENV / ("Scripts/pythonw.exe" if os.name == "nt" else "bin/python")
 MARK = VENV / ".kurulum_tamam"
+SETUP_REV = "2"          # kurulum adımları değişince artar: eski kurulumlar bir kez onarılır (kurulu olanlar atlanır)
 LOG = BASE / "kurulum.log"
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 DEMO = os.environ.get("DMS_DEMO") == "1"
@@ -36,7 +37,10 @@ def base_python() -> str:
 
 
 def ready() -> bool:
-    return VPYW.exists() and MARK.exists()
+    try:
+        return VPYW.exists() and MARK.read_text(encoding="utf-8").strip() == SETUP_REV
+    except OSError:
+        return False
 
 
 def launch_app() -> None:
@@ -153,7 +157,7 @@ class Setup:
                     (self._s["skipped"] if skipped else self._s["done"]).append(key)
                 self._set(frac=0.0)
             MARK.parent.mkdir(parents=True, exist_ok=True)
-            MARK.write_text("ok", encoding="utf-8")
+            MARK.write_text(SETUP_REV, encoding="utf-8")
             self._set(phase="done", step=None, overall=100.0, detail="")
             self._log("KURULUM_TAMAM")
         except Cancelled:
@@ -269,9 +273,28 @@ class Setup:
     def _step_cuda(self):
         if DEMO:
             return self._demo(2, "nvidia_cudnn_cu12", 700)
-        if self._ok("import nvidia.cudnn"):
+        # PyTorch kendi cuDNN / cuBLAS kopyasıyla gelir. Whisper ve ses ayırma için kurulan NVIDIA paketleri
+        # AYNI sürümde olmalı; yoksa Windows iki sürümü karıştırır ("giriş noktası bulunamadı" hataları).
+        r = subprocess.run([str(VPY), "-c", "import torch;print(torch.backends.cudnn.version() or 0, torch.version.cuda or '')"],
+                           capture_output=True, text=True, creationflags=NO_WINDOW)
+        try:
+            cv, cuda = r.stdout.split()
+            cv = int(cv)
+        except ValueError:
+            cv, cuda = 0, ""
+        cudnn = f"{cv // 10000}.{cv % 10000 // 100}.{cv % 100}" if cv else ""
+        cublas = cuda if cuda.startswith("12.") else ""
+        want = [f"nvidia-cudnn-cu12=={cudnn}.*" if cudnn else "nvidia-cudnn-cu12==9.*",
+                f"nvidia-cublas-cu12=={cublas}.*" if cublas else "nvidia-cublas-cu12"]
+        self._log(f"PyTorch cuDNN {cudnn or '?'} · CUDA {cuda or '?'} → {' '.join(want)}")
+        chk = ("from importlib.metadata import version as v;import sys;"
+               f"sys.exit(0 if v('nvidia-cudnn-cu12').startswith('{cudnn}.') and v('nvidia-cublas-cu12').startswith('{cublas}.') else 1)")
+        if cudnn and cublas and self._ok(chk):
             return True
-        self._pip("nvidia-cublas-cu12", "nvidia-cudnn-cu12==9.*", hint=1.0)
+        if self._pip(*want, hint=1.0, check=False) != 0:          # tam sürüm yoksa en yakın alt sürüm
+            near = [f"nvidia-cudnn-cu12=={cudnn.rsplit('.', 1)[0]}.*" if cudnn else "nvidia-cudnn-cu12==9.*",
+                    f"nvidia-cublas-cu12=={cublas.split('.')[0]}.{cublas.split('.')[1]}.*" if cublas else "nvidia-cublas-cu12"]
+            self._pip(*near, hint=1.0)
         return False
 
     # ---- 5) program kütüphaneleri + düzeltmeler

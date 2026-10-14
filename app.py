@@ -17,6 +17,13 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parent
 os.chdir(BASE)
 sys.path.insert(0, str(BASE))
+
+if os.name == "nt":                                  # eksik DLL'lerde Windows hata penceresi açılmasın (hata günlüğe düşer)
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002 | 0x8000)
+    except Exception:
+        pass
 if sys.stdout is None or sys.stderr is None or os.environ.get("DMS_LOG") == "1":   # pythonw
     _log = open(BASE / "uygulama.log", "a", encoding="utf-8", errors="replace", buffering=1)
     sys.stdout = sys.stderr = _log
