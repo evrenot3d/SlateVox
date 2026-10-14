@@ -61,22 +61,20 @@ pre{margin:8px 0 0;max-height:170px;overflow:auto;background:#1e1e1e;border:1px 
 
   <!-- giriş -->
   <section id="vIntro" class="card">
-    <p><b>Programın çalışması için gerekli bileşenlerin bir kez indirilmesi gerekiyor.</b>
-      Bundan sonra program internete ihtiyaç duymadan, tamamen bilgisayarınızda çalışır.</p>
+    <p><b>Programın çalışması için temel bileşenlerin bir kez indirilmesi gerekiyor.</b></p>
     <div class="items">
       <div class="item"><b>PyTorch</b><span class="dim">yapay zekâ altyapısı</span><i>~3 GB</i></div>
       <div class="item" id="iCuda"><b>Ekran kartı kütüphaneleri</b><span class="dim">NVIDIA CUDA</span><i>~1 GB</i></div>
-      <div class="item"><b>Whisper Large V3 Turbo</b><span class="dim">İngilizce konuşmayı yazıya döker</span><i>~1,6 GB</i></div>
-      <div class="item"><b>MiLMMT-46 4B</b><span class="dim">Türkçe çeviri</span><i>~2,5 GB</i></div>
-      <div class="item"><b>UVR · EMA · Antalia</b><span class="dim">ses ayırma ve Türkçe sesler</span><i>~1 GB</i></div>
-      <div class="item"><b>Program kütüphaneleri</b><span class="dim">llama.cpp ve diğerleri</span><i>~1 GB</i></div>
+      <div class="item"><b>Program kütüphaneleri</b><span class="dim">ses işleme, pencere ve diğerleri</span><i>~1 GB</i></div>
     </div>
     <div class="facts">
-      <span>Toplam: <b>~10 GB</b> indirme</span>
+      <span>Toplam: <b>~5 GB</b> indirme</span>
       <span id="fGpu"></span>
       <span id="fDisk"></span>
     </div>
-    <p class="dim" style="margin-top:12px">İnternet hızınıza göre 20–60 dakika sürebilir. Pencereyi kapatırsanız
+    <p class="dim" style="margin-top:12px"><b>Yapay zekâ modelleri</b> (Whisper, çeviri, Türkçe sesler…) şimdi indirilmez:
+      ilk dublajda, yalnızca seçtiğiniz ayarların gerektirdikleri indirilir ve bir kez indirilen model bir daha inmez.</p>
+    <p class="dim" style="margin-top:6px">İnternet hızınıza göre 10–30 dakika sürebilir. Pencereyi kapatırsanız
       bir sonraki açılışta kaldığı yerden devam eder.</p>
   </section>
 
@@ -163,8 +161,8 @@ async function init() {
   $("#iCuda").hidden = !info.gpu;
   $("#fGpu").innerHTML = info.gpu ? `Ekran kartı: <b>${esc(info.gpu_name)}</b>`
     : `<span class="warn">NVIDIA ekran kartı bulunamadı — program işlemciyle çalışır, çok yavaş olur</span>`;
-  $("#fDisk").innerHTML = info.free_gb < 25
-    ? `<span class="warn">Boş alan: ${info.free_gb} GB — en az 25 GB önerilir</span>` : `Boş alan: ${info.free_gb} GB`;
+  $("#fDisk").innerHTML = info.free_gb < 20
+    ? `<span class="warn">Boş alan: ${info.free_gb} GB — en az 20 GB önerilir</span>` : `Boş alan: ${info.free_gb} GB`;
   show("intro");
   const st = await api.state();
   if (st.phase !== "intro") { render(st); if (st.phase === "running") timer = setInterval(poll, 400); }

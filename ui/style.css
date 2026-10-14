@@ -373,3 +373,7 @@ input[type=color]:disabled{opacity:.35;cursor:default}
 .updprog .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
 .mi>button.dot,.drop button.dot{position:relative}
 .mi>button.dot::after,.drop button.dot::after{content:"";position:absolute;top:5px;right:4px;width:7px;height:7px;border-radius:50%;background:#e8892f}
+
+/* ---- ilk kullanımda model indirme notu */
+.dlnote{margin:8px 0 2px;padding:8px 10px;border-radius:6px;background:var(--accent-soft);border:1px solid rgba(59,142,243,.35);font-size:12px;line-height:1.45;color:#cfe0f7}
+.dlnote b{color:#fff;font-weight:600}

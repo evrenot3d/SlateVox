@@ -20,6 +20,7 @@ function Run([string]$exe, [string[]]$argv) {
     Add-Content -LiteralPath $Log -Value ("> " + $exe + " " + ($argv -join " ")) -Encoding utf8
     & $exe @argv 2>&1 | ForEach-Object {
         $s = "$_"
+        if ($s -eq "System.Management.Automation.RemoteException") { return }   # boş hata satırları
         Write-Host $s
         Add-Content -LiteralPath $Log -Value $s -Encoding utf8
     }
@@ -117,11 +118,12 @@ Pip @("-r", "requirements.txt")
 if (PipOk "torchaudio") { Run $Py @("-m", "pip", "uninstall", "-y", "torchaudio") | Out-Null }
 if ($Gpu) {
     # onnxruntime (CPU) paketi onnxruntime-gpu'yu ezer -> GPU surumunu geri yukle
-    & $Py -c "import onnxruntime as o,sys;sys.exit(0 if 'CUDAExecutionProvider' in o.get_available_providers() else 1)" 2>$null
-    if ($LASTEXITCODE -ne 0) {
+    # yeni onnxruntime-gpu surumleri CUDA 13 ister; PyTorch cu128 ile uyumlu CUDA 12 derlemesi (1.22) kullanilir
+    $ortv = & $Py -c "from importlib.metadata import version as v;print(v('onnxruntime-gpu'))" 2>$null
+    if (-not ("$ortv".Trim().StartsWith("1.22."))) {
         Say "onnxruntime-gpu duzeltiliyor"
         Run $Py @("-m", "pip", "uninstall", "-y", "onnxruntime", "onnxruntime-gpu") | Out-Null
-        Pip @("--no-deps", "onnxruntime-gpu")
+        Pip @("--no-deps", "onnxruntime-gpu==1.22.*")
     }
     # torch + torchvision CUDA ve birbiriyle uyumlu olmali
     Say "torch / torchvision CUDA kontrolu"
@@ -129,9 +131,7 @@ if ($Gpu) {
     Say ("torch: " + (& $Py -c "import torch,torchvision;print(torch.__version__, torchvision.__version__, 'cuda=', torch.cuda.is_available(), torch.cuda.get_device_name(0))"))
 }
 
-# ---------- 4) Modeller (eksik olanlar)
-Say "Modeller kontrol ediliyor / indiriliyor"
-if ((Run $Py @("-u", "modelleri_indir.py")) -ne 0) { Fail "Bazi modeller indirilemedi (yukaridaki hataya bakin)" }
+# Modeller burada indirilmez: ilk dublajda, yalnız gerekenler indirilir.
 
 Say "KURULUM_TAMAM"
 

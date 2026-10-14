@@ -959,6 +959,12 @@ function drawJob() {
       html += `<div class="stg ${s.status}" title="${esc(s.detail || "")}"><span class="dot"></span><span class="nm">${esc(s.name)}${run && s.detail ? ` <small style="color:var(--dim)">· ${esc(s.detail)}</small>` : ""}</span><span class="pc">${pc}</span>` +
         (run ? `<div class="bar"><b style="width:${s.progress || 0}%"></b></div>` : "") + `</div>`;
     }
+    const dl = cur.stages.find((s) => s.status === "indiriliyor" && / indiriliyor/.test(s.detail || ""));
+    if (dl) {
+      html += `<div class="dlnote"><b>⬇ Model indiriliyor — yalnızca bir kez.</b> Bu model ilk kullanımda bilgisayarınıza indirilir; ` +
+        `sonraki dublajlarda hazırdır, bir daha beklemezsiniz.</div>`;
+      if (!S.dlToast) { S.dlToast = true; toast("Gerekli model indiriliyor — yalnızca ilk kullanımda, bir kez iner."); }
+    }
   } else if (st.stopped) html = `<div class="stg"><span></span><span class="nm">Durduruldu — kaldığı yerden sürdürmek için “Devam Et”</span><span></span></div>`;
   else if (!st.complete && !st.running) html = `<div class="stg"><span></span><span class="nm">Bekliyor</span><span></span></div>`;
   if (!st.buffering && !st.complete) html += `<div class="stg"><span></span><span class="nm" style="color:var(--dim)">Buffering kapalı: tamamı bitince dublajlı izlenir</span><span></span></div>`;

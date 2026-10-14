@@ -35,7 +35,7 @@ MODELS.mkdir(exist_ok=True)
 os.environ.setdefault("HF_HOME", str(MODELS / "hf"))
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
-VERSION = "1.3.5"
+VERSION = "1.3.6"
 DEMO = os.environ.get("DMS_DEMO") == "1"
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -63,10 +63,10 @@ WHISPER_MODEL = "large-v3-turbo"
 MT_DEFAULT = "milmmt4"
 MT_MODELS = {
     "hymt7": {"name": "Hy-MT2 7B", "repo": "tencent/Hy-MT2-7B-GGUF", "file": "Hy-MT2-7B-Q4_K_M.gguf",
-              "dir": "hy-mt2", "fmt": "hymt", "layers": 32, "ctx": 2048, "overhead": 900, "demo_s": 1.2},
+              "dir": "hy-mt2", "fmt": "hymt", "layers": 32, "ctx": 2048, "overhead": 900, "demo_s": 1.2, "size_mb": 4700},
     "milmmt4": {"name": "MiLMMT-46 4B", "repo": "mradermacher/MiLMMT-46-4B-v1.0-GGUF",
                 "file": "MiLMMT-46-4B-v1.0.Q4_K_M.gguf", "dir": "milmmt", "fmt": "milmmt", "layers": 34,
-                "ctx": 2048, "overhead": 700, "demo_s": 0.9},
+                "ctx": 2048, "overhead": 700, "demo_s": 0.9, "size_mb": 2500},
 }
 GENDER_REPO = "Alice-Sabrina-Ivy/voice-gender-classifier-onnx-q8-v2"
 SPK_REPO, SPK_FILE = "Wespeaker/wespeaker-voxceleb-resnet34-LM", "voxceleb_resnet34_LM.onnx"   # konuşmacı ayırma
@@ -322,6 +322,57 @@ def gpu_name() -> str:
     return ""
 
 
+def _dir_mb(paths) -> float:
+    tot = 0
+    for d in paths:
+        try:
+            for root, _, files in os.walk(d):
+                for f in files:
+                    try:
+                        tot += os.path.getsize(os.path.join(root, f))
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+    return tot / 2 ** 20
+
+
+class download_watch:
+    """İlk kullanımda model indirilirken klasör boyutunu izleyip ilerlemeyi aşamaya yazar.
+    Model zaten varsa yalnız "yükleniyor" der."""
+
+    def __init__(self, on, label: str, dirs, approx_mb: float, present: bool):
+        self.on, self.label, self.dirs, self.mb, self.present = on, label, [Path(d) for d in dirs], approx_mb, present
+        self.stop = threading.Event()
+
+    def __enter__(self):
+        if self.present or DEMO:
+            self.on("indiriliyor", 0, f"{self.label} yükleniyor")
+            return self
+        size = f"~{self.mb / 1024:.1f} GB".replace(".", ",") if self.mb >= 1024 else f"~{self.mb:.0f} MB"
+        self.on("indiriliyor", 0, f"{self.label} indiriliyor ({size}, yalnızca bir kez)")
+        base = _dir_mb(self.dirs)
+
+        def run():
+            while not self.stop.wait(1.0):
+                got = max(0.0, _dir_mb(self.dirs) - base)
+                pct = min(99.0, got * 100.0 / max(1.0, self.mb))
+                self.on("indiriliyor", pct, f"{self.label} indiriliyor · {got:,.0f} / ~{self.mb:,.0f} MB · yalnızca bir kez".replace(",", "."))
+        threading.Thread(target=run, daemon=True).start()
+        return self
+
+    def __exit__(self, *a):
+        self.stop.set()
+        return False
+
+
+def _has_files(d: Path, pattern: str = "*") -> bool:
+    try:
+        return any(p.is_file() and p.stat().st_size > 1_000_000 for p in Path(d).rglob(pattern))
+    except OSError:
+        return False
+
+
 def _add_nvidia_dll_dirs() -> None:
     if os.name != "nt":
         return
@@ -363,11 +414,10 @@ class LlamaServer:
         self.stop()
         exe = self.exe()
         if not exe:
-            if on:
-                on("indiriliyor", 0, "Çeviri motoru (llama.cpp) indiriliyor")
             sys.path.insert(0, str(BASE))
             import modelleri_indir
-            modelleri_indir.llama_cpp()
+            with download_watch(on or (lambda *a: None), "Çeviri motoru (llama.cpp)", [MODELS / "llama.cpp"], 700, False):
+                modelleri_indir.llama_cpp()
             exe = self.exe()
         if not exe:
             raise RuntimeError("llama-server bulunamadı.")
@@ -648,12 +698,13 @@ class Engine:
             return voc, inst
         with self.lock:
             if self._sep is None:
-                on("indiriliyor", 0, "Ses ayırma modeli yükleniyor")
                 from audio_separator.separator import Separator
                 tmp = WORK / "_sep"
                 tmp.mkdir(exist_ok=True)
-                self._sep = Separator(output_dir=str(tmp), output_format="WAV", model_file_dir=str(MODELS / "uvr"))
-                self._sep.load_model(model_filename=UVR_MODEL)
+                with download_watch(on, "Ses ayırma modeli", [MODELS / "uvr"], 67,
+                                    (MODELS / "uvr" / UVR_MODEL).exists()):
+                    self._sep = Separator(output_dir=str(tmp), output_format="WAV", model_file_dir=str(MODELS / "uvr"))
+                    self._sep.load_model(model_filename=UVR_MODEL)
             on("calisiyor", 10, "Konuşma ve arka plan ayrılıyor")
             tag = f"p{os.getpid()}_{int(time.time() * 1000)}"
             names = {"Vocals": f"{tag}_v", "Instrumental": f"{tag}_i"}
@@ -751,19 +802,25 @@ class Engine:
         self.make_room(2400 if self._whisper is None else 700, keep=("whisper",))
         with self.lock:
             if self._whisper is None:
-                on("indiriliyor", 0, "Whisper yükleniyor")
                 _add_nvidia_dll_dirs()
                 from faster_whisper import WhisperModel
-                try:
-                    self._whisper = WhisperModel(WHISPER_MODEL, device="cuda", compute_type="float16",
-                                                 download_root=str(MODELS / "whisper"))
-                except Exception as e:
-                    print("[whisper] GPU açılamadı, CPU:", e, flush=True)
-                    self._whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8",
-                                                 download_root=str(MODELS / "whisper"))
+                with download_watch(on, "Whisper", [MODELS / "whisper"], 1550,
+                                    _has_files(MODELS / "whisper", "model.bin")):
+                    try:
+                        self._whisper = WhisperModel(WHISPER_MODEL, device="cuda", compute_type="float16",
+                                                     download_root=str(MODELS / "whisper"))
+                    except Exception as e:
+                        print("[whisper] GPU açılamadı, CPU:", e, flush=True)
+                        self._whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8",
+                                                     download_root=str(MODELS / "whisper"))
             on("calisiyor", 0, "Yazıya dökülüyor")
+            # ses dosyası yerine 16 kHz dizi verilir: faster-whisper'ın dosya okuyucusu (PyAV) bazı sürümlerde bozuk
+            x, sr = read_wav(vocals)
+            audio = x.mean(axis=1).astype(np.float32)
+            if sr != 16000:
+                audio = resample(audio, sr, 16000).astype(np.float32)
             segs, _ = self._whisper.transcribe(
-                str(vocals), language="en", task="transcribe", beam_size=5, word_timestamps=True,
+                audio, language="en", task="transcribe", beam_size=5, word_timestamps=True,
                 vad_filter=True, vad_parameters={"min_silence_duration_ms": 500}, condition_on_previous_text=False)
             words = []
             for s in segs:
@@ -883,9 +940,9 @@ class Engine:
         m = MT_MODELS[key]
         path = MODELS / m["dir"] / m["file"]
         if not path.exists():
-            on("indiriliyor", 0, f"{m['name']} indiriliyor (ilk kullanım)")
             from huggingface_hub import hf_hub_download
-            path = Path(hf_hub_download(m["repo"], m["file"], local_dir=str(MODELS / m["dir"])))
+            with download_watch(on, m["name"], [MODELS / m["dir"]], m.get("size_mb", 2500), False):
+                path = Path(hf_hub_download(m["repo"], m["file"], local_dir=str(MODELS / m["dir"])))
         return path
 
     @staticmethod
@@ -931,6 +988,10 @@ class Engine:
             return out
 
     # ---- 4) dublaj
+    @staticmethod
+    def _tts_seen(gender: str) -> bool:
+        return (MODELS / f".tts_{gender}").exists()
+
     def _tts_model(self, gender: str):
         if gender not in self._tts:
             if gender == "kadin":
@@ -963,8 +1024,10 @@ class Engine:
         with self.lock:
             for g in set(voices):
                 if g not in self._tts and not DEMO:
-                    on("indiriliyor", 0, ("EMA Lightning" if g == "kadin" else "Antalia-2 Mini") + " yükleniyor")
-                    self._tts_model(g)
+                    with download_watch(on, "EMA Lightning" if g == "kadin" else "Antalia-2 Mini", [MODELS / "hf"], 350,
+                                        self._tts_seen(g)):
+                        self._tts_model(g)
+                    (MODELS / f".tts_{g}").write_text("ok", encoding="utf-8")
             n = len(segs)
             track = np.zeros(int((chunk_dur + 6) * DUB_SR), dtype=np.float32)
             cursor, timings = 0.0, []

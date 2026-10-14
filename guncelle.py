@@ -181,8 +181,19 @@ class Updater:
             time.sleep(0.6)
             if E.DEMO or os.name != "nt":
                 return
+            flags = 0x00000008 | 0x00000200                          # DETACHED_PROCESS | NEW_PROCESS_GROUP
+            launcher = E.BASE / "python" / "pythonw.exe"
+            if launcher.exists() and (E.BASE / "baslat.py").exists():
+                # EXE kurulumu: başlatıcı üzerinden aç (yeni sürüm ek bileşen istiyorsa kurulum ekranı onu tamamlar)
+                subprocess.Popen([str(launcher), str(E.BASE / "baslat.py")], cwd=str(E.BASE), creationflags=flags)
+                time.sleep(1.0)
+                try:
+                    import server
+                    server.manager().engine.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                os._exit(0)
             exe = Path(sys.executable)
             pyw = exe.with_name("pythonw.exe") if exe.with_name("pythonw.exe").exists() else exe
-            subprocess.Popen([str(pyw), str(E.BASE / "app.py")], cwd=str(E.BASE),
-                             creationflags=0x00000008 | 0x00000200)   # DETACHED_PROCESS | NEW_PROCESS_GROUP
+            subprocess.Popen([str(pyw), str(E.BASE / "app.py")], cwd=str(E.BASE), creationflags=flags)
         threading.Thread(target=go, daemon=True).start()

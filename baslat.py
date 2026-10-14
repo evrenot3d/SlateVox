@@ -24,7 +24,7 @@ VENV = BASE / ".venv"
 VPY = VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 VPYW = VENV / ("Scripts/pythonw.exe" if os.name == "nt" else "bin/python")
 MARK = VENV / ".kurulum_tamam"
-SETUP_REV = "2"          # kurulum adımları değişince artar: eski kurulumlar bir kez onarılır (kurulu olanlar atlanır)
+SETUP_REV = "3"          # kurulum adımları değişince artar: eski kurulumlar bir kez onarılır (kurulu olanlar atlanır)
 LOG = BASE / "kurulum.log"
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 DEMO = os.environ.get("DMS_DEMO") == "1"
@@ -69,9 +69,10 @@ STEPS = [
     ("torch", "PyTorch indiriliyor (~3 GB)", 34),
     ("sep", "Ses ayırma bileşenleri", 7),
     ("cuda", "Ekran kartı kütüphaneleri (~1 GB)", 9),
-    ("libs", "Program kütüphaneleri", 9),
-    ("models", "Yapay zekâ modelleri indiriliyor (~6 GB)", 38),
+    ("libs", "Program kütüphaneleri", 12),
 ]
+# Yapay zekâ modelleri burada indirilmez: ilk dublajda, yalnız seçilen ayarların gerektirdikleri indirilir.
+ORT_GPU = "onnxruntime-gpu==1.22.*"      # CUDA 12 derlemesi (PyTorch cu128 ile uyumlu); yeni sürümler CUDA 13 ister
 
 
 class Cancelled(Exception):
@@ -306,10 +307,11 @@ class Setup:
         if self._ok("import torchaudio"):                           # bazı paketler CPU torchaudio çeker
             self._cmd([VPY, "-m", "pip", "uninstall", "-y", "torchaudio"], check=False)
         if self._gpu:
-            if not self._ok("import onnxruntime as o,sys;"
-                            "sys.exit(0 if 'CUDAExecutionProvider' in o.get_available_providers() else 1)"):
+            if not self._ok("from importlib.metadata import version as v,PackageNotFoundError as N;import sys\n"
+                            "try: v('onnxruntime'); sys.exit(1)\nexcept N: pass\n"
+                            "sys.exit(0 if v('onnxruntime-gpu').startswith('1.22.') else 1)"):
                 self._cmd([VPY, "-m", "pip", "uninstall", "-y", "onnxruntime", "onnxruntime-gpu"], check=False)
-                self._pip("--no-deps", "onnxruntime-gpu")
+                self._pip("--no-deps", ORT_GPU)
             self._set(frac=0.85, detail="PyTorch ekran kartı uyumu")
             self._cmd([VPY, "-u", BASE / "torch_duzelt.py"])
         return False
