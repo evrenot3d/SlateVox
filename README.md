@@ -35,9 +35,11 @@ Türkçe seslendirir. Arka plandaki müzik ve efektler korunur; dublaj videoyla 
 1. [Releases](https://github.com/evrenot3d/dogru-mu-samet/releases/latest) sayfasından
    **`DogruMuSamet-Kurulum-x.y.z.exe`** dosyasını indirip çalıştırın. Yönetici izni gerekmez.
 2. Program ilk açıldığında kendi ekranında **"Gerekli bileşenler"** sayfası çıkar.
-   **Bileşenleri İndir** deyin; yapay zekâ altyapısı ve modeller (yaklaşık 10 GB) indirilir.
-   İnternet hızınıza göre 20–60 dakika sürebilir. Yarıda kalırsa kaldığı yerden devam eder.
-3. Bitince program kendiliğinden açılır. Sonraki açılışlar hızlıdır ve internet gerekmez.
+   **Bileşenleri İndir** deyin; yapay zekâ altyapısı (yaklaşık 5 GB) indirilir.
+   Yarıda kalırsa kaldığı yerden devam eder.
+3. Bitince program kendiliğinden açılır.
+4. **Yapay zekâ modelleri ilk dublajda** indirilir — yalnızca seçtiğiniz ayarların gerektirdikleri, yalnızca
+   bir kez. Sonraki dublajlarda bekleme olmaz ve internet gerekmez.
 
 > **Windows / antivirüs uyarısı:** Kurulum dosyası dijital olarak imzalı değildir (imza sertifikası ücretlidir).
 > Bu yüzden Windows *"Windows kişisel bilgisayarınızı korudu"* diyebilir ya da antivirüsünüz yeni bir dosya olduğu
