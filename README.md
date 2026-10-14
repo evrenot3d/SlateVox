@@ -22,6 +22,14 @@ Türkçe seslendirir. Arka plandaki müzik ve efektler korunur; dublaj videoyla 
 - Türkçe / İngilizce altyazı, konuşmacı noktaları, ses karıştırıcı, dışa aktarma (MP4 / WAV)
 - Program içinden güncelleme
 
+## Ekran görüntüleri
+
+<p align="center"><img src="docs/ekran-dublaj.jpg" alt="YouTube videosu açık, Detaylı mod ve VoxCPM2 seçili" width="900"></p>
+<p align="center"><i>YouTube bağlantısıyla açılmış bir video · dublajlanacak aralık seçimi · Detaylı mod (VoxCPM2)</i></p>
+
+<p align="center"><img src="docs/ekran-acilis.jpg" alt="Açılış ekranı" width="900"></p>
+<p align="center"><i>Açılış ekranı · video açın, sürükleyip bırakın ya da YouTube bağlantısı yapıştırın</i></p>
+
 ## Kurulum
 
 1. [Releases](https://github.com/evrenot3d/dogru-mu-samet/releases/latest) sayfasından
