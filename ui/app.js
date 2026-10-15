@@ -171,7 +171,7 @@ const canvas = $("#canvas"), subList = $("#subList");
 const vid = new Player($("#vid"));
 const S = {
   video: null,                    // {video_id, name, duration, url}
-  mode: store.get("mode", "hizli"), gender: store.get("gender", "erkek"), sep: store.get("sep", "uvr"), mt: store.get("mt", "milmmt4"), tts: store.get("tts", "std"),
+  mode: store.get("mode", "hizli"), gender: "oto", sep: store.get("sep", "uvr"), mt: store.get("mt", "milmmt4"), tts: store.get("tts", "std"),
   av: null,                       // videoya bağlı (çalan) dublaj varyantı
   status: null, chunks: new Map(),// k -> {info, buf, loading, used}
   segs: [], active: -1, lang: "tr", cc: true,
@@ -607,18 +607,21 @@ function spkOf(k, j, g) {                                 // cümlenin kişisi (
   const a = S.spk?.assign?.[String(k)];
   return (a && a[j]) || g || null;
 }
-const voicesOn = () => !!(S.av && (S.av.startsWith("detayli") || S.av === "hizli-oto") && S.status?.variant === S.av && S.status.complete && S.segs.some((s) => s.g));
+/* buffering açıkken de görünür: hazır parçalar geldikçe kişi listesi yenilenir */
+const voicesOn = () => !!(S.av && (S.av.startsWith("detayli") || S.av === "hizli-oto") && S.status?.variant === S.av && S.segs.some((s) => s.g));
+const readyKey = () => (S.status?.chunks || []).filter((c) => c.state === "hazir").map((c) => c.i + ":" + c.end).join(",");
 const voiceFilter = () => (S.voiceSel.size && voicesOn() ? S.voiceSel : null);
-async function loadSpeakers() {
-  if (S.spkLoading || S.spk) return;
+async function loadSpeakers(force = false) {
+  if (S.spkLoading || (S.spk && !force)) return;
   S.spkLoading = true;
-  const av = S.av, vidId = S.video?.video_id;
+  const av = S.av, vidId = S.video?.video_id, rk = readyKey();
   try {
     const r = await api(`/api/speakers/${vidId}?variant=${av}`);
     if (av !== S.av || vidId !== S.video?.video_id) return;
     S.spk = r.speakers ? r : { speakers: null };
+    S.spkFor = rk;
     for (const s of S.segs) s.spk = spkOf(s.k, s.j, s.g);
-    renderSubs();
+    renderSubs(); drawVoices();
   } catch { S.spk = { speakers: null }; } finally { S.spkLoading = false; }
 }
 function drawVoices() {
@@ -626,6 +629,7 @@ function drawVoices() {
   p.hidden = !on;
   if (!on) return;
   if (!S.spk) { loadSpeakers(); return; }
+  if (S.spkFor !== readyKey()) loadSpeakers(true);       // yeni parça hazır: kişiler yeniden hesaplanır
   const list = S.spk.speakers?.length ? S.spk.speakers
     : ["kadin", "erkek"].filter((g) => S.segs.some((s) => s.g === g)).map((g) => ({ id: g, g, rank: 1, n: S.segs.filter((s) => s.g === g).length }));
   const ids = new Set(list.map((x) => x.id));
@@ -656,7 +660,7 @@ $("#pVoices").addEventListener("click", (e) => {
   subList.scrollTop = 0; S.userScroll = 0;
   drawVoices(); renderSubs(); tick();
 });
-function resetVoices() { S.voiceSel.clear(); S.spk = null; $("#pVoices .vbody").dataset.key = ""; drawVoices(); }
+function resetVoices() { S.voiceSel.clear(); S.spk = null; S.spkFor = null; $("#pVoices .vbody").dataset.key = ""; drawVoices(); }
 function segAt(t) {
   let lo = 0, hi = S.segs.length - 1, ans = -1;
   while (lo <= hi) { const m = (lo + hi) >> 1; if (S.segs[m].start <= t) { ans = m; lo = m + 1; } else hi = m - 1; }
@@ -790,6 +794,7 @@ $("#modelList").addEventListener("click", (e) => {
   const row = e.target.closest(".mrow.pick");
   if (row) { box.dataset.open = box.dataset.open === row.dataset.k ? "" : row.dataset.k; drawModels(); }
 });
+$("#modelsHd").addEventListener("click", () => { if (isAdv()) return; S.modelsOpen = !S.modelsOpen; drawDubPanel(); });
 $("#bufTg").addEventListener("change", (e) => { S.bufOn = e.target.checked; drawDubPanel(); });
 /* parça süresi: 2 · 5 · 10 · 20 dk (Hızlı'da 2, VoxCPM2'li modlarda 5 seçili başlar); her mod kendi seçimini tutar */
 S.lenMode = { hizli: 120, orta: 300, guclu: 300, gelismis: 300 };
@@ -871,11 +876,14 @@ function drawDubPanel() {
   $$("#modeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.m === S.mode));
   $$(".voice").forEach((b) => b.classList.toggle("on", b.dataset.g === S.gender));
   $("#voiceField").hidden = S.mode !== "hizli";
-  $("#modeNote").textContent = isPreset() ? `${MODES[S.mode]}: hazır ayarlar (UVR · MiLMMT · VoxCPM2, ${PRESETS[S.mode].steps} adım). Yalnız buffering değiştirilebilir.`
-    : isAdv() ? "Gelişmiş: bütün modeller ve ayarlar seçilebilir." : "";
-  $("#modeNote").hidden = S.mode === "hizli";
+  const fold = !isAdv(), open = !fold || !!S.modelsOpen;   // Hızlı · Orta · Güçlü: tıklayınca açılır
+  $("#modelsField").classList.toggle("fold", fold);
+  $("#modelsField").classList.toggle("open", open);
+  $("#modelList").hidden = !open;
+  $("#modelsSum").textContent = fold && !open ? (isPreset() ? `VoxCPM2 · ${PRESETS[S.mode].steps} adım` : modelRows().at(-1).model) : "";
   drawModels();
   drawVoxSteps();
+  if (isPreset() && !open) $("#voxField").hidden = true;
   const L = S.bufLen;
   $("#lenRow").hidden = false;
   $("#bufTg").checked = S.bufOn;

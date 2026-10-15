@@ -156,7 +156,6 @@
               <button type="button" data-m="guclu">Güçlü</button>
               <button type="button" data-m="gelismis">Gelişmiş</button>
             </div>
-            <div class="bnote" id="modeNote" hidden></div>
           </div>
           <div class="field" id="voiceField">
             <label>Ses</label>
@@ -166,12 +165,13 @@
               <button type="button" class="voice" data-g="erkek"><b>Erkek</b><small>Antalia-2 Mini</small></button>
             </div>
           </div>
-          <div class="field">
-            <label>Çalışacak modeller</label>
+          <div class="field" id="modelsField">
+            <button type="button" class="foldhd" id="modelsHd"><span>Çalışacak modeller</span><small id="modelsSum"></small>
+              <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
             <div class="models" id="modelList"></div>
           </div>
           <div class="field" id="voxField" hidden>
-            <label>VoxCPM2 adım sayısı</label>
+            <label class="hastip">VoxCPM2 adım sayısı <i class="ti">i</i><span class="tipbox" id="voxNote"></span></label>
             <div class="steps" id="voxSteps">
               <button type="button" data-s="5"><b>5</b><em>hızlı</em></button>
               <button type="button" data-s="10"><b>10</b><em>önerilen</em></button>
@@ -179,7 +179,6 @@
               <button type="button" data-s="30" class="slow"><b>30</b><em>yavaş</em></button>
             </div>
             <div class="voxlock" id="voxLock" hidden></div>
-            <div class="bnote" id="voxNote">Az adım dublajı hızlandırır, çok adım sesi daha doğal ve ayrıntılı yapar.</div>
           </div>
           <div class="field" id="rangeRow" hidden>
             <label>Dublajlanacak aralık</label>
@@ -187,7 +186,7 @@
             <div class="bnote">Oynatma çubuğundaki başlangıç / bitiş tutamaçlarını sürükleyerek seçin.</div>
           </div>
           <div class="field" id="bufField">
-            <label class="tgrow" title="Açık: ilk parça hazır olunca oynar, sonrakiler siz izlerken hazırlanır">Buffering<input type="checkbox" id="bufTg" class="tg"></label>
+            <label class="tgrow hastip"><span class="tl">Buffering <i class="ti">i</i></span><input type="checkbox" id="bufTg" class="tg"><span class="tipbox" id="bufNote"></span></label>
             <div class="lenrow" id="lenRow" title="Her parçanın süresi. Parçalar cümle ortasından bölünmez.">
               <span>Parça süresi</span>
               <div class="lens" id="bufLens">
@@ -197,7 +196,6 @@
                 <button type="button" data-l="1200">20 dk</button>
               </div>
             </div>
-            <div class="bnote" id="bufNote"></div>
           </div>
           <div class="gorow">
             <button class="btn primary" id="goBtn" type="button" disabled>Dublajı Başlat</button>
