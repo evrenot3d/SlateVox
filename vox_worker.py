@@ -18,6 +18,9 @@ import traceback
 PROTO = sys.stdout          # protokol kanalı; başka her çıktı günlüğe gider
 sys.stdout = sys.stderr
 
+import faulthandler
+faulthandler.enable(file=sys.stderr, all_threads=True)    # çökmede (yerel hata) iz günlüğe yazılsın
+
 import numpy as np
 import soundfile as sf
 import torch
@@ -37,6 +40,28 @@ except Exception:  # noqa: BLE001
 
 def main():
     from voxcpm import VoxCPM
+    try:
+        import importlib.metadata as md
+        print(f"python {sys.version.split()[0]} · torch {torch.__version__} · cuda {torch.version.cuda} · "
+              f"voxcpm {md.version('voxcpm')} · transformers {md.version('transformers')} · numpy {np.__version__}",
+              flush=True)
+        if torch.cuda.is_available():
+            free, total = torch.cuda.mem_get_info()
+            print(f"GPU {torch.cuda.get_device_name(0)} · boş {free / 2**20:.0f} / {total / 2**20:.0f} MB", flush=True)
+        if os.name == "nt":
+            import ctypes
+
+            class MS(ctypes.Structure):
+                _fields_ = [("l", ctypes.c_ulong), ("load", ctypes.c_ulong), ("tot", ctypes.c_ulonglong),
+                            ("free", ctypes.c_ulonglong), ("ptot", ctypes.c_ulonglong), ("pfree", ctypes.c_ulonglong),
+                            ("vtot", ctypes.c_ulonglong), ("vfree", ctypes.c_ulonglong), ("x", ctypes.c_ulonglong)]
+            m = MS()
+            m.l = ctypes.sizeof(MS)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
+            print(f"RAM boş {m.free / 2**30:.1f} / {m.tot / 2**30:.1f} GB · sanal bellek boş {m.pfree / 2**30:.1f} GB",
+                  flush=True)
+    except Exception:  # noqa: BLE001
+        pass
     cache = os.environ.get("DMS_VOX_CACHE") or None
     # optimize=False: torch.compile Windows'ta Triton ister; denoiser kapalı (ses zaten ayrılmış geliyor)
     model = VoxCPM.from_pretrained("openbmb/VoxCPM2", load_denoiser=False, optimize=False, cache_dir=cache)

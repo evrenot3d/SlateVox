@@ -564,7 +564,16 @@ class VoxProc:
         while True:                                  # kütüphanelerin araya yazdığı satırları atla
             line = self.proc.stdout.readline()
             if not line:
-                raise RuntimeError("VoxCPM2 kapandı (voxcpm.log)")
+                try:
+                    rc = self.proc.wait(10)
+                except Exception:  # noqa: BLE001
+                    rc = None
+                why = {3221225477: "bellek erişim hatası", 3221226505: "iç hata", 3221225501: "işlemci komutu desteklenmiyor",
+                       3221225725: "yığın taşması", 3221225495: "bellek yetersiz", 3221226356: "yığın bozulması"}
+                code = f" · çıkış kodu {rc:#x} {why.get(rc & 0xFFFFFFFF, '')}".rstrip() if isinstance(rc, int) else ""
+                with open(BASE / "voxcpm.log", "a", encoding="utf-8", errors="replace") as f:
+                    f.write(f"\n[VoxCPM2 süreci kapandı{code}]\n")
+                raise RuntimeError(f"VoxCPM2 kapandı{code} (voxcpm.log)")
             try:
                 j = json.loads(line)
             except ValueError:
@@ -577,13 +586,27 @@ class VoxProc:
             return
         if not vox_ready():
             self.install(on)
-        on("indiriliyor", 0, "VoxCPM2 yükleniyor (ilk kullanımda model indirilir, ~5 GB)")
-        env = dict(os.environ, DMS_VOX_CACHE=str(MODELS / "voxcpm"), PYTHONIOENCODING="utf-8")
-        err = open(BASE / "voxcpm.log", "a", encoding="utf-8", errors="replace")
-        self.proc = subprocess.Popen([str(vox_python()), "-u", str(BASE / "vox_worker.py")], stdin=subprocess.PIPE,
-                                     stdout=subprocess.PIPE, stderr=err, text=True, encoding="utf-8",
-                                     creationflags=NO_WINDOW, cwd=str(BASE), env=env)
-        j = self._read()
+        have = _has_files(MODELS / "voxcpm", "*.safetensors")
+        for attempt in (1, 2):                       # ilk yükleme kapanırsa bir kez daha denenir
+            msg = "VoxCPM2 yükleniyor" if have or attempt == 2 else \
+                "VoxCPM2 indiriliyor (~5 GB, yalnızca bir kez) ve yükleniyor"
+            on("indiriliyor", 0, msg + (" · yeniden deneniyor" if attempt == 2 else ""))
+            env = dict(os.environ, DMS_VOX_CACHE=str(MODELS / "voxcpm"), PYTHONIOENCODING="utf-8",
+                       PYTHONFAULTHANDLER="1")
+            err = open(BASE / "voxcpm.log", "a", encoding="utf-8", errors="replace")
+            err.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} VoxCPM2 başlatılıyor (deneme {attempt}) =====\n")
+            err.flush()
+            self.proc = subprocess.Popen([str(vox_python()), "-u", str(BASE / "vox_worker.py")], stdin=subprocess.PIPE,
+                                         stdout=subprocess.PIPE, stderr=err, text=True, encoding="utf-8",
+                                         creationflags=NO_WINDOW, cwd=str(BASE), env=env)
+            try:
+                j = self._read()
+                break
+            except RuntimeError:
+                self.proc = None
+                if attempt == 2:
+                    raise
+                time.sleep(2)
         if not j.get("ready"):
             raise RuntimeError("VoxCPM2 başlatılamadı (voxcpm.log)")
         self.sr = int(j.get("sr", 48000))
