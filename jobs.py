@@ -33,7 +33,7 @@ import numpy as np
 
 import engine as E
 
-CHUNK_LEN, CHUNK_MIN, CHUNK_MAX, NOBUF_LEN = 90.0, 60.0, 300.0, 150.0   # buffering parça süresi (kullanıcı seçer)
+CHUNK_LEN, CHUNK_MIN, CHUNK_MAX, NOBUF_LEN = 120.0, 60.0, 1200.0, 150.0   # buffering parça süresi (2·5·10·20 dk)
 VOX_STEPS_MIN, VOX_STEPS_MAX = 4, 30   # VoxCPM2 difüzyon adımı (belgelerde önerilen aralık; varsayılan 10)
 SEARCH = 12.0                     # parça sonu: hedefin ± bu kadar sn içindeki en uygun konuşma boşluğu
 SEPS = {"uvr": "", "bandit2": "BandIt v2", "tiger": "TIGER-DnR"}
@@ -43,6 +43,12 @@ KEEP = {"_webview"}                       # calisma/ içinde silinmeyenler
 # Varyant: "<mod>[-<ayırma>][~<çeviri modeli>][~<ses modeli>]"  ör. "detayli-tiger~hymt7~vox";
 # varsayılan çeviri (MiLMMT) ve varsayılan ses (EMA + Antalia) için ek yok
 TTS_KEYS = {"vox": "VoxCPM2"}
+# Hazır modlar (ayarları kilitli): UVR + MiLMMT + VoxCPM2, sabit adım sayısıyla. Varyant: "detayli~vox~orta"
+PRESETS = {"orta": 4, "guclu": 10}
+
+
+def preset_of(variant: str):
+    return next((o for o in variant.split("~")[1:] if o in PRESETS), None)
 
 
 def parse_variant(variant: str) -> tuple:
@@ -63,8 +69,11 @@ def tts_of(variant: str) -> str:
 
 def valid_variant(variant: str) -> bool:
     base, mt, tts, opts = parse_variant(variant)
-    return (base in BASES and len(opts) == len(set(opts)) and all(o in E.MT_MODELS or o in TTS_KEYS for o in opts)
-            and (base.startswith("detayli") or (mt == E.MT_DEFAULT and tts == "std")))
+    pre = [o for o in opts if o in PRESETS]
+    return (base in BASES and len(opts) == len(set(opts))
+            and all(o in E.MT_MODELS or o in TTS_KEYS or o in PRESETS for o in opts)
+            and (base.startswith("detayli") or (mt == E.MT_DEFAULT and tts == "std"))
+            and (not pre or (len(pre) == 1 and base == "detayli" and tts == "vox" and mt == E.MT_DEFAULT)))
 
 
 def is_det(variant: str) -> bool:
@@ -111,8 +120,8 @@ def fname_mt(variant: str, base: str) -> str:
 def fname_dub(variant: str, base: str) -> str:
     """ayırmaya, çeviri modeline ve ses modeline bağlı dosya (dublaj)"""
     stem, ext = base.rsplit(".", 1)
-    t = tts_of(variant)
-    return f"{stem}{sfx(variant)}{mtsfx(variant)}{'' if t == 'std' else '~' + t}.{ext}"
+    t, pre = tts_of(variant), preset_of(variant)
+    return f"{stem}{sfx(variant)}{mtsfx(variant)}{'' if t == 'std' else '~' + t}{'~' + pre if pre else ''}.{ext}"
 
 
 def stages_for(variant: str) -> list:
@@ -467,6 +476,8 @@ class Manager:
                 self.job.chunk_len = float(np.clip(float(chunk_len), CHUNK_MIN, CHUNK_MAX))
             if vox_steps:
                 self.job.vox_steps = int(np.clip(int(vox_steps), VOX_STEPS_MIN, VOX_STEPS_MAX))
+            if preset_of(variant):                     # hazır mod: adım sayısı sabit
+                self.job.vox_steps = PRESETS[preset_of(variant)]
             self._apply(self.job, v, variant, rng)
             self.job.focus = focus
             self.job.error = None
@@ -502,6 +513,8 @@ class Manager:
                 self.job.chunk_len = float(np.clip(float(chunk_len), CHUNK_MIN, CHUNK_MAX))
             if vox_steps:
                 self.job.vox_steps = int(np.clip(int(vox_steps), VOX_STEPS_MIN, VOX_STEPS_MAX))
+            if preset_of(variant):                     # hazır mod: adım sayısı sabit
+                self.job.vox_steps = PRESETS[preset_of(variant)]
             self.job.seed = random.randint(1, 1_000_000)
             self._apply(self.job, v, variant, rng)
             self.job.focus = focus

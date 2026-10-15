@@ -16,7 +16,9 @@ Bütün yapay zekâ modelleri kendi bilgisayarınızda çalışır; videoların�
 Türkçe seslendirir. Arka plandaki müzik ve efektler korunur; dublaj videoyla eş zamanlı çalar.
 
 - **Hızlı mod:** kadın, erkek ya da otomatik (kadınlar kadın, erkekler erkek sesiyle) hazır Türkçe sesler
-- **Detaylı mod:** VoxCPM2 ile her cümle konuşanın kendi sesinden kopyalanır; vurgu, hız ve duygu taşınır
+- **Orta ve Güçlü mod:** VoxCPM2 ile her cümle konuşanın kendi sesinden kopyalanır; vurgu, hız ve duygu taşınır
+  (hazır ayarlar: Orta 4 adım, Güçlü 10 adım)
+- **Gelişmiş mod:** ses ayırma, çeviri ve ses modelleriyle VoxCPM2 adım sayısı serbestçe seçilir
 - **Parça parça işleme:** ilk bölüm hazır olur olmaz izlemeye başlarsınız, kalanı arkada hazırlanır
 - **YouTube bağlantısı:** video indirilmeden izlenir, dublaj için yalnız ses indirilir
 - Türkçe / İngilizce altyazı, konuşmacı noktaları, ses karıştırıcı, dışa aktarma (MP4 / WAV)
@@ -24,8 +26,8 @@ Türkçe seslendirir. Arka plandaki müzik ve efektler korunur; dublaj videoyla 
 
 ## Ekran görüntüleri
 
-<p align="center"><img src="docs/ekran-dublaj.jpg" alt="YouTube videosu açık, Detaylı mod ve VoxCPM2 seçili" width="900"></p>
-<p align="center"><i>YouTube bağlantısıyla açılmış bir video · dublajlanacak aralık seçimi · Detaylı mod (VoxCPM2)</i></p>
+<p align="center"><img src="docs/ekran-dublaj.jpg" alt="YouTube videosu açık, VoxCPM2 seçili" width="900"></p>
+<p align="center"><i>YouTube bağlantısıyla açılmış bir video · dublajlanacak aralık seçimi · VoxCPM2 ile dublaj</i></p>
 
 <p align="center"><img src="docs/ekran-acilis.jpg" alt="Açılış ekranı" width="900"></p>
 <p align="center"><i>Açılış ekranı · video açın, sürükleyip bırakın ya da YouTube bağlantısı yapıştırın</i></p>

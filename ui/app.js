@@ -182,13 +182,21 @@ const S = {
 window.__dms = S;
 /* varyant: "<mod>[-<ayırma>][~<çeviri modeli>]" — sunucu dosyaları buna göre ayırır */
 const MT_DEFAULT = "milmmt4";                          // varsayılan çeviri modeli (Hızlı da bunu kullanır)
-const variant = () => S.mode === "detayli"
-  ? "detayli" + (S.sep && S.sep !== "uvr" ? "-" + S.sep : "") + (S.mt && S.mt !== MT_DEFAULT ? "~" + S.mt : "") +
-    (S.tts === "vox" ? "~vox" : "")
-  : "hizli-" + S.gender;
+/* modlar: Hızlı · Orta · Güçlü (hazır, kilitli: UVR + MiLMMT + VoxCPM2) · Gelişmiş (her şey seçilebilir) */
+const MODES = { hizli: "Hızlı", orta: "Orta", guclu: "Güçlü", gelismis: "Gelişmiş" };
+const PRESETS = { orta: { steps: 4 }, guclu: { steps: 10 } };
+if (S.mode === "detayli") S.mode = "gelismis";
+if (!MODES[S.mode]) S.mode = "hizli";
+const isPreset = () => !!PRESETS[S.mode];
+const isAdv = () => S.mode === "gelismis";
+const usesVox = () => isPreset() || (isAdv() && S.tts === "vox");
+const variant = () => S.mode === "hizli" ? "hizli-" + S.gender
+  : isPreset() ? "detayli~vox~" + S.mode
+  : "detayli" + (S.sep && S.sep !== "uvr" ? "-" + S.sep : "") + (S.mt && S.mt !== MT_DEFAULT ? "~" + S.mt : "") +
+    (S.tts === "vox" ? "~vox" : "");
 const parseV = (v) => { const [base, ...opts] = String(v || "").split("~"); return { base, det: base.startsWith("detayli"),
-  sep: base.startsWith("detayli-") ? base.split("-")[1] : "uvr", mt: opts.find((o) => o !== "vox") || MT_DEFAULT,
-  tts: opts.includes("vox") ? "vox" : "std" }; };
+  sep: base.startsWith("detayli-") ? base.split("-")[1] : "uvr", mt: opts.find((o) => MT_MODELS[o]) || MT_DEFAULT,
+  tts: opts.includes("vox") ? "vox" : "std", preset: opts.find((o) => PRESETS[o]) || "" }; };
 const fmt = (t) => { t = Math.max(0, t | 0); const h = (t / 3600) | 0, m = ((t % 3600) / 60) | 0, s = t % 60;
   return (h ? h + ":" + String(m).padStart(2, "0") : String(m).padStart(2, "0")) + ":" + String(s).padStart(2, "0"); };
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -693,8 +701,8 @@ const SEP_MODELS = {
   tiger: { name: "TIGER-DnR", note: "yavaş çalışır", slow: true },
 };
 if (!SEP_MODELS[S.sep]) S.sep = "uvr";
-/* buffering: Hızlı'da açık, Detaylı'da kapalı başlar; her mod kendi ayarını tutar */
-S.bufMode = { hizli: true, detayli: false };
+/* buffering: her modda açık başlar (VoxCPM2'li modlar uzun sürer, izlerken hazırlanması rahat olur); her mod kendi ayarını tutar */
+S.bufMode = { hizli: true, orta: true, guclu: true, gelismis: true };
 Object.defineProperty(S, "bufOn", { configurable: true, get: () => !!S.bufMode[S.mode], set: (v) => { S.bufMode[S.mode] = !!v; } });
 S.autoplay = false;                                    // dublaj başlatılınca: hazır olunca kendiliğinden oynat
 S.scrub = null;                                        // çubuk sürüklenirken {t: yuvarlağın yeri, to: önizleme}
@@ -714,29 +722,31 @@ S.tts = "vox";                                         // Detaylı'da her açıl
 /* aşama → modelin hız istatistiğindeki anahtarı (sunucudaki stage_model ile aynı) */
 const statKey = (st, v) => { const p = parseV(v);
   return { separate: "sep:" + p.sep, transcribe: "asr:whisper-turbo", gender: "gender:vgc", translate: "mt:" + p.mt,
-           dub: p.tts === "vox" ? "tts:vox:" + S.voxSteps : p.det || v === "hizli-oto" ? "tts:ema+antalia" : v.endsWith("kadin") ? "tts:ema" : "tts:antalia" }[st]; };
+           dub: p.tts === "vox" ? "tts:vox:" + (p.preset ? PRESETS[p.preset].steps : S.voxSteps) : p.det || v === "hizli-oto" ? "tts:ema+antalia" : v.endsWith("kadin") ? "tts:ema" : "tts:antalia" }[st]; };
 const fmtSec = (x) => (x < 10 ? `${x.toFixed(1).replace(".", ",")} sn` : x < 60 ? `${Math.round(x)} sn`
   : `${Math.floor(x / 60)} dk ${String(Math.round(x % 60)).padStart(2, "0")} sn`);
 const perMin = (key) => S.stats?.models?.find((m) => m.key === key)?.per_min;
 function modelRows() {
-  const det = S.mode === "detayli";
-  const auto = !det && S.gender === "oto";
-  const tts = det ? TTS_MODELS[S.tts].name : auto ? "EMA Lightning + Antalia-2 Mini" : S.gender === "kadin" ? "EMA Lightning" : "Antalia-2 Mini";
+  const det = isAdv();                                   // yalnız Gelişmiş'te modeller seçilebilir
+  const pre = isPreset();
+  const auto = S.mode === "hizli" && S.gender === "oto";
+  const tts = pre ? "VoxCPM2" : det ? TTS_MODELS[S.tts].name : auto ? "EMA Lightning + Antalia-2 Mini" : S.gender === "kadin" ? "EMA Lightning" : "Antalia-2 Mini";
   const sm = det ? SEP_MODELS[S.sep] : SEP_MODELS.uvr;
   const mm = det ? MT_MODELS[S.mt] : MT_MODELS[MT_DEFAULT];
   const rows = [
     { k: det ? "sep" : "", st: "separate", stage: "Ses ayırma", model: sm.name, tag: sm.slow ? "yavaş çalışır" : "" },
     { st: "transcribe", stage: "İngilizce metin", model: "Whisper Large V3 Turbo" },
   ];
-  if (det || auto) rows.push({ st: "gender", stage: "Kadın / erkek", model: "Voice Gender Classifier" });
+  if (det || pre || auto) rows.push({ st: "gender", stage: "Kadın / erkek", model: "Voice Gender Classifier" });
   rows.push({ k: det ? "mt" : "", st: "translate", stage: "Türkçe çeviri", model: mm.name, tag: det && mm.slow ? "yavaş" : "" },
-            { k: det ? "tts" : "", st: "dub", stage: "Türkçe ses", model: tts, tag: det && S.tts === "vox" ? "yavaş" : "" });
+            { k: det ? "tts" : "", st: "dub", stage: "Türkçe ses", model: tts, tag: usesVox() ? "yavaş" : "" });
+  if (pre) rows.forEach((r) => { r.lock = true; });
   return rows;
 }
 /* Detaylı: her modelin bu dublajda harcadığı süre adının sağında */
 function stageTime(st) {
   const s = S.status;
-  if (S.mode !== "detayli" || !s || s.variant !== variant() || !s.timing?.[st]) return "";
+  if (S.mode === "hizli" || !s || s.variant !== variant() || !s.timing?.[st]) return "";
   const sec = s.timing[st], vs = s.timing_video?.[st] || 0;
   const pm = vs > 0 ? ` · 1 dk video ≈ ${Math.round((sec / vs) * 60)} sn` : "";
   return `<i class="tm" title="Bu dublajda ${fmtSec(sec)}${pm}">${fmtSec(sec)}</i>`;
@@ -758,13 +768,14 @@ function optList(k) {
 }
 function drawModels() {
   const box = $("#modelList");
-  const open = S.mode === "detayli" ? box.dataset.open || "" : "";
+  const open = isAdv() ? box.dataset.open || "" : "";
   box.innerHTML = modelRows().map((r) => {
     const name = `<span>${esc(r.model)}${r.tag ? ` <em>${r.tag}</em>` : ""}</span>${stageTime(r.st)}`;
     if (r.k) return `<button type="button" class="mrow pick${open === r.k ? " open" : ""}" data-k="${r.k}" title="${r.stage} modelini değiştir">
          <span class="ms">${r.stage}</span><span class="mm">${name}</span>
          <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>` + (open === r.k ? `<div class="mopts">${optList(r.k)}</div>` : "");
-    return `<div class="mrow"><span class="ms">${r.stage}</span><span class="mm">${name}</span></div>`;
+    return `<div class="mrow${r.lock ? " lock" : ""}"${r.lock ? ' title="Bu modda sabit"' : ""}><span class="ms">${r.stage}</span><span class="mm">${name}</span>` +
+      (r.lock ? `<svg class="lk" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>` : "") + `</div>`;
   }).join("");
 }
 $("#modelList").addEventListener("click", (e) => {
@@ -780,21 +791,31 @@ $("#modelList").addEventListener("click", (e) => {
   if (row) { box.dataset.open = box.dataset.open === row.dataset.k ? "" : row.dataset.k; drawModels(); }
 });
 $("#bufTg").addEventListener("change", (e) => { S.bufOn = e.target.checked; drawDubPanel(); });
-/* parça süresi: Detaylı'da 1–5 dk arası seçilir; Hızlı'da sabit 1:30 */
-S.bufLen = 90;
-const QUICK_LEN = 90;
+/* parça süresi: 2 · 5 · 10 · 20 dk (Hızlı'da 2, VoxCPM2'li modlarda 5 seçili başlar); her mod kendi seçimini tutar */
+S.lenMode = { hizli: 120, orta: 300, guclu: 300, gelismis: 300 };
+Object.defineProperty(S, "bufLen", { configurable: true, get: () => S.lenMode[S.mode] || 120, set: (v) => { S.lenMode[S.mode] = v; } });
 const fmtLen = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
 function drawBufLen() {
-  const r = $("#bufLen");
-  r.value = S.bufLen; r.style.setProperty("--p", ((S.bufLen - 60) / 240) * 100 + "%");
-  $("#bufLenO").textContent = fmtLen(S.bufLen) + " dk";
+  for (const b of $$("#bufLens button")) b.classList.toggle("on", +b.dataset.l === S.bufLen);
 }
-$("#bufLen").addEventListener("input", (e) => { S.bufLen = Math.max(60, Math.min(300, +e.target.value)); drawBufLen(); drawDubPanel(); });
-const bufParams = () => ({ buffering: S.bufOn, chunk_len: S.mode === "detayli" ? S.bufLen : QUICK_LEN, vox_steps: S.voxSteps });
+$("#bufLens").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b || !S.bufOn) return; S.bufLen = +b.dataset.l; drawDubPanel(); });
+const voxSteps = () => (isPreset() ? PRESETS[S.mode].steps : S.voxSteps);
+const bufParams = () => ({ buffering: S.bufOn, chunk_len: S.bufLen, vox_steps: voxSteps() });
 /* VoxCPM2 adım sayısı: 4–30, standart 10 */
 S.voxSteps = 10;                                       // 5 · 10 (önerilen) · 20 · 30 (yavaş)
 function drawVoxSteps() {
-  $("#voxField").hidden = !(S.mode === "detayli" && S.tts === "vox");
+  $("#voxField").hidden = !usesVox();
+  const pre = isPreset();
+  $("#voxSteps").hidden = pre;
+  $("#voxLock").hidden = !pre;
+  if (pre) {
+    const n = PRESETS[S.mode].steps, pm = perMin("tts:vox:" + n);
+    $("#voxLock").innerHTML = `<b>${n} adım</b><span>${MODES[S.mode]} modunda sabit${pm != null ? ` · 1 dk video ≈ ${Math.round(pm)} sn` : ""}</span>` +
+      `<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`;
+    $("#voxNote").textContent = n <= 5 ? "Az adım: dublaj daha hızlı hazırlanır; ses biraz daha az doğal olabilir. Ayarları değiştirmek için Gelişmiş modu seçin."
+      : "Hız ve doğallık dengesi için önerilen ayar. Ayarları değiştirmek için Gelişmiş modu seçin.";
+    return;
+  }
   for (const b of $$("#voxSteps button")) {
     const n = +b.dataset.s, pm = perMin("tts:vox:" + n);
     b.classList.toggle("on", n === S.voxSteps);
@@ -818,7 +839,7 @@ const isDone = () => S.av && S.status && S.status.complete;
    bu bilgisayarda gözlenen yaklaşık değerler kullanılır */
 const ETA_GUESS = { "sep:uvr": 12.5, "sep:bandit2": 62, "sep:tiger": 62, "asr:whisper-turbo": 6.5, "gender:vgc": 0.5,
   "mt:milmmt4": 4.5, "mt:hymt7": 6.5, "tts:ema": 1.7, "tts:antalia": 1.7, "tts:ema+antalia": 1.8,
-  "tts:vox:5": 50, "tts:vox:10": 72, "tts:vox:20": 115, "tts:vox:30": 160 };
+  "tts:vox:4": 42, "tts:vox:5": 50, "tts:vox:10": 72, "tts:vox:20": 115, "tts:vox:30": 160 };
 function etaInfo() {
   if (!S.video) return null;
   const v = variant(), p = parseV(v), [a, b] = fullRange();
@@ -838,7 +859,7 @@ function drawEta() {
   const v = variant(), p = parseV(v);
   let t = 0, guess = false;
   for (const k of e.keys) { let pm = perMin(k); if (pm == null) { pm = ETA_GUESS[k] ?? 10; guess = true; } t += (pm * e.sec) / 60; }
-  const L = S.bufOn ? (S.mode === "detayli" ? S.bufLen : QUICK_LEN) : 150;
+  const L = S.bufOn ? S.bufLen : 150;
   t = t * 1.1 + Math.ceil(e.sec / L) * (p.tts === "vox" ? 20 : 6);       // model yükleme payı (parça başına)
   const txt = t < 60 ? "<1 dk" : t < 3600 ? `~${Math.round(t / 60)} dk` : `~${Math.floor(t / 3600)} sa ${Math.round((t % 3600) / 60)} dk`;
   el.innerHTML = `${txt}<small>${e.running ? "kalan · tahmini" : "tahmini"}</small>`;
@@ -850,16 +871,21 @@ function drawDubPanel() {
   $$("#modeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.m === S.mode));
   $$(".voice").forEach((b) => b.classList.toggle("on", b.dataset.g === S.gender));
   $("#voiceField").hidden = S.mode !== "hizli";
+  $("#modeNote").textContent = isPreset() ? `${MODES[S.mode]}: hazır ayarlar (UVR · MiLMMT · VoxCPM2, ${PRESETS[S.mode].steps} adım). Yalnız buffering değiştirilebilir.`
+    : isAdv() ? "Gelişmiş: bütün modeller ve ayarlar seçilebilir." : "";
+  $("#modeNote").hidden = S.mode === "hizli";
   drawModels();
   drawVoxSteps();
-  const L = S.mode === "detayli" ? S.bufLen : QUICK_LEN;
-  $("#lenRow").hidden = S.mode !== "detayli";            // Hızlı: süre ayarı yok, 1:30'luk parçalar
+  const L = S.bufLen;
+  $("#lenRow").hidden = false;
   $("#bufTg").checked = S.bufOn;
   $("#lenRow").classList.toggle("off", !S.bufOn);
   drawBufLen();
+  const slowNote = usesVox() ? "VoxCPM2 kullanıldığı için dublaj uzun sürer; buffering açıkken ilk parça hazır olur olmaz izlemeye başlarsınız. İsterseniz kapatabilirsiniz. " : "";
   $("#bufNote").textContent = S.bufOn
-    ? `Video yaklaşık ${fmtLen(L)} dakikalık parçalara bölünür (cümle ortasından bölünmez). İlk parça hazır olunca oynatma kendiliğinden başlar; sonrakiler siz izlerken hazırlanır.`
-    : "Önce seçili aralığın tamamı hazırlanır, bitince dublajlı oynatma kendiliğinden başlar. Yavaş modeller için önerilir.";
+    ? slowNote + `Video yaklaşık ${Math.round(L / 60)} dakikalık parçalara bölünür (cümle ortasından bölünmez). İlk parça hazır olunca oynatma kendiliğinden başlar; sonrakiler siz izlerken hazırlanır.`
+    : (usesVox() ? "VoxCPM2 kullanıldığı için tamamının hazırlanması uzun sürer; buffering açık daha rahat olur. " : "") +
+      "Önce seçili aralığın tamamı hazırlanır, bitince dublajlı oynatma kendiliğinden başlar.";
   const v = variant(), go = $("#goBtn"), hint = $("#goHint");
   const same = S.av === v && S.status?.variant === v;
   const done = same && isDone();
@@ -877,7 +903,8 @@ function drawDubPanel() {
 }
 const labelOf = (v) => { const p = parseV(v);
   if (!p.det) return v === "hizli-kadin" ? "Hızlı · Kadın" : v === "hizli-oto" ? "Hızlı · Otomatik" : "Hızlı · Erkek";
-  return "Detaylı" + (p.sep !== "uvr" ? " · " + (SEP_MODELS[p.sep]?.name.split(" ·")[0] || "") : "") +
+  if (p.preset) return `${MODES[p.preset]} · VoxCPM2 ${PRESETS[p.preset].steps} adım`;
+  return "Gelişmiş" + (p.sep !== "uvr" ? " · " + (SEP_MODELS[p.sep]?.name.split(" ·")[0] || "") : "") +
     (p.mt !== MT_DEFAULT ? " · " + (MT_MODELS[p.mt]?.name || "") : "") + (p.tts === "vox" ? " · VoxCPM2" : ""); };
 $("#modeSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; S.mode = b.dataset.m; store.set("mode", S.mode); drawDubPanel(); });
 $$(".voice").forEach((b) => b.addEventListener("click", () => { S.gender = b.dataset.g; store.set("gender", S.gender); drawDubPanel(); }));
@@ -1188,6 +1215,20 @@ document.addEventListener("click", (e) => {
   api("/api/open_external", { url: a.dataset.url }).catch(() => toast("Bağlantı açılamadı", true));
 });
 /* ================= güncelleme ================= */
+/* açılışta yeni sürüm bulunursa: sağ üstte bildirim (logo 3 sn'de bir hafifçe titrer); kullanıcı kendisi kapatır */
+function showUpdateCard(u) {
+  $("#updCard")?.remove();
+  const el = document.createElement("div");
+  el.id = "updCard"; el.className = "updcard";
+  el.innerHTML = `<button type="button" class="ux" title="Kapat"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    <img class="ulogo" src="kurulum_logo.png" alt="">
+    <b>Yeni güncelleme var!</b>
+    <p>Sürüm <b>${esc(u.latest)}</b> yayınlandı${u.date ? ` (${esc(u.date)})` : ""}. Kurulu sürüm: ${esc(u.current)}.</p>
+    <div class="ubtns"><button type="button" class="btn primary" data-u="go">Güncelle</button></div>`;
+  el.querySelector(".ux").addEventListener("click", () => el.remove());
+  el.querySelector('[data-u="go"]').addEventListener("click", () => { el.remove(); showUpdate(); });
+  document.body.appendChild(el);
+}
 S.upd = null;
 function markUpdate(u) {
   S.upd = u;
@@ -1279,7 +1320,7 @@ const KNOWN_MODELS = {
   gender: [["gender:vgc", "Voice Gender Classifier"]],
   translate: Object.entries(MT_MODELS).map(([k, m]) => ["mt:" + k, m.name]),
   dub: [["tts:ema", "EMA Lightning"], ["tts:antalia", "Antalia-2 Mini"], ["tts:ema+antalia", "EMA Lightning + Antalia-2 Mini"],
-        ["tts:vox:5", "VoxCPM2 · 5 adım"], ["tts:vox:10", "VoxCPM2 · 10 adım"], ["tts:vox:20", "VoxCPM2 · 20 adım"],
+        ["tts:vox:4", "VoxCPM2 · 4 adım"], ["tts:vox:5", "VoxCPM2 · 5 adım"], ["tts:vox:10", "VoxCPM2 · 10 adım"], ["tts:vox:20", "VoxCPM2 · 20 adım"],
         ["tts:vox:30", "VoxCPM2 · 30 adım"]],
 };
 const STAGE_TITLES = [["separate", "Ses ayırma"], ["transcribe", "İngilizce metin"], ["gender", "Kadın / erkek ayırma"],
@@ -1388,7 +1429,7 @@ api("/api/info").then((i) => {
   if (i.version) $("#verTag").textContent = "V. " + i.version;
   if (!i.demo || new URLSearchParams(location.search).has("upd")) {      // açılışta sessizce güncelleme denetimi
     setTimeout(() => checkUpdate().then((u) => {
-      if (u.newer) toast(`Yeni güncelleme var: sürüm ${u.latest} — Hakkında › Güncelleme`);
+      if (u.newer) showUpdateCard(u);
     }).catch(() => {}), 2500);
   }
   loadStats().then(() => drawModels());

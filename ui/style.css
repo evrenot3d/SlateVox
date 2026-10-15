@@ -377,3 +377,34 @@ input[type=color]:disabled{opacity:.35;cursor:default}
 /* ---- ilk kullanımda model indirme notu */
 .dlnote{margin:8px 0 2px;padding:8px 10px;border-radius:6px;background:var(--accent-soft);border:1px solid rgba(59,142,243,.35);font-size:12px;line-height:1.45;color:#cfe0f7}
 .dlnote b{color:#fff;font-weight:600}
+
+/* ---- 4 mod, kilitli ayarlar, parça süresi düğmeleri */
+#modeSeg button{font-size:12.5px}
+#modeNote{margin-top:6px}
+.mrow.lock{opacity:.92}
+.mrow.lock .lk{width:13px;height:13px;flex:none;fill:none;stroke:var(--muted);stroke-width:2;margin-left:6px}
+.voxlock{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-input)}
+.voxlock b{font-weight:600}
+.voxlock span{color:var(--muted);font-size:12px;flex:1}
+.voxlock svg{width:14px;height:14px;fill:none;stroke:var(--muted);stroke-width:2}
+.lens{display:flex;gap:5px;flex:1;min-width:0}
+.lens button{flex:1;white-space:nowrap;padding:4px 6px;border-radius:14px;border:1px solid var(--line);color:var(--muted);font-size:12px}
+.lens button:hover{color:#f0f0f0;border-color:#5a5a5a}
+.lens button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.lenrow.off .lens button{pointer-events:none;opacity:.45}
+
+/* ---- güncelleme bildirimi */
+.updcard{position:fixed;top:64px;left:calc(50% - 150px - 190px);z-index:55;width:300px;background:var(--bg-panel);border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 18px 40px rgba(0,0,0,.5);padding:14px 16px 14px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;
+  animation:uin .35s ease-out}
+.updcard .ulogo{width:110px;height:auto;margin:2px 0 4px;animation:ushake 3s ease-in-out infinite;transform-origin:50% 60%}
+.updcard b{font-size:14.5px}
+.updcard p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.45}
+.updcard p b{font-size:12.5px;color:var(--text)}
+.updcard .ubtns{margin-top:8px;display:flex;gap:8px}
+.updcard .ux{position:absolute;top:8px;right:8px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
+.updcard .ux:hover{background:rgba(255,255,255,.08);color:#fff}
+.updcard .ux svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2}
+@keyframes ushake{0%,14%,100%{transform:rotate(0) translateX(0)}2%{transform:rotate(-7deg) translateX(-2px)}4%{transform:rotate(6deg) translateX(2px)}
+  6%{transform:rotate(-5deg) translateX(-1px)}8%{transform:rotate(4deg) translateX(1px)}10%{transform:rotate(-2deg)}12%{transform:rotate(1deg)}}
+@keyframes uin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}

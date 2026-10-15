@@ -152,8 +152,11 @@
             <label>Mod</label>
             <div class="seg" id="modeSeg">
               <button type="button" data-m="hizli">Hızlı</button>
-              <button type="button" data-m="detayli">Detaylı</button>
+              <button type="button" data-m="orta">Orta</button>
+              <button type="button" data-m="guclu">Güçlü</button>
+              <button type="button" data-m="gelismis">Gelişmiş</button>
             </div>
+            <div class="bnote" id="modeNote" hidden></div>
           </div>
           <div class="field" id="voiceField">
             <label>Ses</label>
@@ -175,6 +178,7 @@
               <button type="button" data-s="20" class="slow"><b>20</b><em>yavaş</em></button>
               <button type="button" data-s="30" class="slow"><b>30</b><em>yavaş</em></button>
             </div>
+            <div class="voxlock" id="voxLock" hidden></div>
             <div class="bnote" id="voxNote">Az adım dublajı hızlandırır, çok adım sesi daha doğal ve ayrıntılı yapar.</div>
           </div>
           <div class="field" id="rangeRow" hidden>
@@ -184,10 +188,14 @@
           </div>
           <div class="field" id="bufField">
             <label class="tgrow" title="Açık: ilk parça hazır olunca oynar, sonrakiler siz izlerken hazırlanır">Buffering<input type="checkbox" id="bufTg" class="tg"></label>
-            <div class="lenrow" id="lenRow" title="Her parçanın süresi: en az 1, en çok 5 dakika. Parçalar cümle ortasından bölünmez.">
+            <div class="lenrow" id="lenRow" title="Her parçanın süresi. Parçalar cümle ortasından bölünmez.">
               <span>Parça süresi</span>
-              <input type="range" id="bufLen" min="60" max="300" step="15" value="90">
-              <output id="bufLenO">1:30</output>
+              <div class="lens" id="bufLens">
+                <button type="button" data-l="120">2 dk</button>
+                <button type="button" data-l="300">5 dk</button>
+                <button type="button" data-l="600">10 dk</button>
+                <button type="button" data-l="1200">20 dk</button>
+              </div>
             </div>
             <div class="bnote" id="bufNote"></div>
           </div>
