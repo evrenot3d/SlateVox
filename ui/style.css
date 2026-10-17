@@ -153,6 +153,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .sub .x{color:#bdbdbd;line-height:1.45;user-select:text}
 .sub .g{font-size:11px;margin-left:5px}
 .sub .g.kadin{color:var(--fem)}.sub .g.erkek{color:var(--male)}
+.sub .emo{display:inline-block;margin-left:7px;padding:0 6px;border-radius:8px;font-size:10.5px;line-height:16px;vertical-align:1px;color:var(--dim);border:1px solid var(--line)}
 .sub.on{background:var(--accent-soft);border-left-color:var(--accent)}
 .sub.on .x{color:#fff}
 .sub.on .t{color:#b9d4f7}

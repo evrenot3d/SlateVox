@@ -15,7 +15,10 @@ if not exist "python\python.exe" (
   if exist "_py" rmdir /s /q "_py"
   curl.exe -L --fail -o "_py.zip" "https://www.nuget.org/api/v2/package/python/3.12.10"
   if errorlevel 1 goto pyfail
-  powershell -NoProfile -Command "Expand-Archive -LiteralPath '_py.zip' -DestinationPath '_py' -Force"
+  rem Windows'un kendi tar araci ZIP acar; olmazsa PowerShell Expand-Archive denenir
+  mkdir "_py" >nul 2>&1
+  tar -xf "_py.zip" -C "_py" >nul 2>&1
+  if not exist "_py\tools\python.exe" powershell -NoProfile -Command "Expand-Archive -LiteralPath '_py.zip' -DestinationPath '_py' -Force"
   if not exist "_py\tools\python.exe" goto pyfail
   move "_py\tools" "python" >nul
   rmdir /s /q "_py"

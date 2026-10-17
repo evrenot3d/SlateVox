@@ -184,19 +184,28 @@ window.__dms = S;
 const MT_DEFAULT = "milmmt4";                          // varsayılan çeviri modeli (Hızlı da bunu kullanır)
 /* modlar: Hızlı · Orta · Güçlü (hazır, kilitli: UVR + MiLMMT + VoxCPM2) · Gelişmiş (her şey seçilebilir) */
 const MODES = { hizli: "Hızlı", orta: "Orta", guclu: "Güçlü", gelismis: "Gelişmiş" };
-const PRESETS = { orta: { steps: 4 }, guclu: { steps: 10 } };
+const PRESETS = { orta: { steps: 10 }, guclu: { steps: 20 } };
 if (S.mode === "detayli") S.mode = "gelismis";
 if (!MODES[S.mode]) S.mode = "hizli";
 const isPreset = () => !!PRESETS[S.mode];
 const isAdv = () => S.mode === "gelismis";
-const usesVox = () => isPreset() || (isAdv() && S.tts === "vox");
+/* adım sayısı seçilebilen ses modelleri (Gelişmiş); Ahenk'lilerde kadınları Ahenk (duygulu), erkekleri Antalia okur */
+const STEP_TTS = {
+  vox: { name: "VoxCPM2", steps: [[5, "hızlı"], [10, "önerilen"], [20, "yavaş"], [30, "yavaş"]], def: 10 },
+  ahenkcep: { name: "Ahenk Cep", steps: [[4, "hızlı"], [8, ""], [16, "önerilen"], [32, ""]], def: 16 },
+  ahenk: { name: "Ahenk", steps: [[10, "hızlı"], [16, "önerilen"], [20, "yavaş"], [30, "yavaş"]], def: 16 },
+};
+const AHENK = new Set(["ahenkcep", "ahenk"]);
+const TTS_IDS = ["vox", "ema", "antalia", "ahenkcep", "ahenk"];   // Gelişmiş: her biri tek başına, bütün cümleleri okur
+const stepTts = () => (isPreset() ? "vox" : isAdv() && STEP_TTS[S.tts] ? S.tts : "");   // adım alanı hangi model için
+const slowTts = () => (isPreset() || (isAdv() && (S.tts === "vox" || S.tts === "ahenk")) ? (isPreset() ? "VoxCPM2" : STEP_TTS[S.tts].name) : "");
 const variant = () => S.mode === "hizli" ? "hizli-" + S.gender
   : isPreset() ? "detayli~vox~" + S.mode
   : "detayli" + (S.sep && S.sep !== "uvr" ? "-" + S.sep : "") + (S.mt && S.mt !== MT_DEFAULT ? "~" + S.mt : "") +
-    (S.tts === "vox" ? "~vox" : "");
+    (TTS_IDS.includes(S.tts) ? "~" + S.tts : "");
 const parseV = (v) => { const [base, ...opts] = String(v || "").split("~"); return { base, det: base.startsWith("detayli"),
   sep: base.startsWith("detayli-") ? base.split("-")[1] : "uvr", mt: opts.find((o) => MT_MODELS[o]) || MT_DEFAULT,
-  tts: opts.includes("vox") ? "vox" : "std", preset: opts.find((o) => PRESETS[o]) || "" }; };
+  tts: opts.find((o) => TTS_IDS.includes(o)) || "std", preset: opts.find((o) => PRESETS[o]) || "" }; };
 const fmt = (t) => { t = Math.max(0, t | 0); const h = (t / 3600) | 0, m = ((t % 3600) / 60) | 0, s = t % 60;
   return (h ? h + ":" + String(m).padStart(2, "0") : String(m).padStart(2, "0")) + ":" + String(s).padStart(2, "0"); };
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -566,6 +575,8 @@ function addSegments(info) {
   S.segs.sort((a, b) => a.start - b.start);
   renderSubs();
 }
+const EMO_TR = { angry: "kızgın", cheerful: "neşeli", sad: "üzgün", calm: "sakin", surprised: "şaşkın",
+                 empathetic: "şefkatli", laughing: "gülerek" };
 function renderSubs() {
   drawVoices();
   if (!S.segs.length) {
@@ -584,7 +595,10 @@ function renderSubs() {
     prevK = s.k;
     const sg = spkInfo(s.spk)?.g || s.g;
     const g = det && sg ? `<span class="g ${sg}" style="color:${spkColor(s.spk) || ""}">${sg === "kadin" ? "♀" : "♂"}</span>` : "";
-    html += `<div class="sub" data-i="${i}"><span class="t">${fmt(s.start)}${g}</span><span class="x">${esc(S.lang === "tr" ? (s.tr || s.en) : s.en)}</span></div>`;
+    // Ahenk: cümleye bildirilen duygu (düz okunanlarda etiket yok)
+    const emo = s.emo && s.emo !== "neutral" && EMO_TR[s.emo]
+      ? `<span class="emo" title="Ahenk'e bildirilen duygu">${EMO_TR[s.emo]}</span>` : "";
+    html += `<div class="sub" data-i="${i}"><span class="t">${fmt(s.start)}${g}</span><span class="x">${esc(S.lang === "tr" ? (s.tr || s.en) : s.en)}${emo}</span></div>`;
   });
   if (!html) html = `<div class="empty">Seçili seste cümle yok.</div>`;
   if (S.status && !S.status.complete) html += `<div class="subsep">Sonraki bölümler hazırlanıyor…</div>`;
@@ -720,13 +734,18 @@ if (!["kadin", "oto", "erkek"].includes(S.gender)) S.gender = "oto";
 /* Türkçe ses (Detaylı) */
 const TTS_MODELS = {                                   // sıra: önerilen önce
   vox: { name: "VoxCPM2", note: "önerilen · orijinal sesi kopyalar, duyguyu ve hızı taşır · yavaş", rec: true },
-  std: { name: "EMA Lightning + Antalia-2 Mini", note: "hazır kadın / erkek sesleri · hızlı" },
+  ema: { name: "EMA Lightning", note: "hazır Türkçe kadın sesi · hızlı" },
+  antalia: { name: "Antalia-2 Mini", note: "hazır Türkçe erkek sesi · hızlı" },
+  ahenkcep: { name: "Ahenk Cep", note: "deneysel · Türkçe kadın sesi, duygulu · hızlı", exp: true },
+  ahenk: { name: "Ahenk", note: "deneysel · Türkçe kadın sesi, duygulu ve gülebilir (VoxCPM2 + LoRA) · yavaş", exp: true },
 };
-S.tts = "vox";                                         // Detaylı'da her açılışta VoxCPM2 (Hızlı'da hep EMA / Antalia)
+const TTS_NAME = (id) => TTS_MODELS[id]?.name || "EMA Lightning + Antalia-2 Mini";   // "std": eski kadın / erkek çifti
+S.tts = "vox";                                         // Gelişmiş'te her açılışta VoxCPM2 (Hızlı'da hep EMA / Antalia)
 /* aşama → modelin hız istatistiğindeki anahtarı (sunucudaki stage_model ile aynı) */
 const statKey = (st, v) => { const p = parseV(v);
-  return { separate: "sep:" + p.sep, transcribe: "asr:whisper-turbo", gender: "gender:vgc", translate: "mt:" + p.mt,
-           dub: p.tts === "vox" ? "tts:vox:" + (p.preset ? PRESETS[p.preset].steps : S.voxSteps) : p.det || v === "hizli-oto" ? "tts:ema+antalia" : v.endsWith("kadin") ? "tts:ema" : "tts:antalia" }[st]; };
+  return { separate: "sep:" + p.sep, transcribe: "asr:whisper-turbo", gender: "gender:vgc", emotion: "emo:jh", translate: "mt:" + p.mt,
+           dub: STEP_TTS[p.tts] ? `tts:${p.tts}:` + (p.preset ? PRESETS[p.preset].steps : stepsOf(p.tts))
+             : p.tts !== "std" ? "tts:" + p.tts : p.det || v === "hizli-oto" ? "tts:ema+antalia" : v.endsWith("kadin") ? "tts:ema" : "tts:antalia" }[st]; };
 const fmtSec = (x) => (x < 10 ? `${x.toFixed(1).replace(".", ",")} sn` : x < 60 ? `${Math.round(x)} sn`
   : `${Math.floor(x / 60)} dk ${String(Math.round(x % 60)).padStart(2, "0")} sn`);
 const perMin = (key) => S.stats?.models?.find((m) => m.key === key)?.per_min;
@@ -734,7 +753,7 @@ function modelRows() {
   const det = isAdv();                                   // yalnız Gelişmiş'te modeller seçilebilir
   const pre = isPreset();
   const auto = S.mode === "hizli" && S.gender === "oto";
-  const tts = pre ? "VoxCPM2" : det ? TTS_MODELS[S.tts].name : auto ? "EMA Lightning + Antalia-2 Mini" : S.gender === "kadin" ? "EMA Lightning" : "Antalia-2 Mini";
+  const tts = pre ? "VoxCPM2" : det ? TTS_NAME(S.tts) : auto ? "EMA Lightning + Antalia-2 Mini" : S.gender === "kadin" ? "EMA Lightning" : "Antalia-2 Mini";
   const sm = det ? SEP_MODELS[S.sep] : SEP_MODELS.uvr;
   const mm = det ? MT_MODELS[S.mt] : MT_MODELS[MT_DEFAULT];
   const rows = [
@@ -742,8 +761,10 @@ function modelRows() {
     { st: "transcribe", stage: "İngilizce metin", model: "Whisper Large V3 Turbo" },
   ];
   if (det || pre || auto) rows.push({ st: "gender", stage: "Kadın / erkek", model: "Voice Gender Classifier" });
+  if (det && AHENK.has(S.tts)) rows.push({ st: "emotion", stage: "Duygu", model: "Emotion DistilRoBERTa + ses şiddeti" });
   rows.push({ k: det ? "mt" : "", st: "translate", stage: "Türkçe çeviri", model: mm.name, tag: det && mm.slow ? "yavaş" : "" },
-            { k: det ? "tts" : "", st: "dub", stage: "Türkçe ses", model: tts, tag: usesVox() ? "yavaş" : "" });
+            { k: det ? "tts" : "", st: "dub", stage: "Türkçe ses", model: tts,
+              tag: slowTts() ? "yavaş" : det && TTS_MODELS[S.tts]?.exp ? "deneysel" : "" });
   if (pre) rows.forEach((r) => { r.lock = true; });
   return rows;
 }
@@ -757,11 +778,14 @@ function stageTime(st) {
 }
 function optList(k) {
   if (k === "tts") return Object.entries(TTS_MODELS).map(([id, m]) => {
-    const pm = perMin(id === "vox" ? "tts:vox:" + S.voxSteps : "tts:ema+antalia");
-    const inst = id === "vox" && S.info && !S.info.vox ? " · ilk kullanımda kurulur (~8 GB indirme)" : "";
+    const pm = perMin(STEP_TTS[id] ? `tts:${id}:${stepsOf(id)}` : "tts:" + id);
+    const inst = (id === "vox" || id === "ahenk") && S.info && !S.info.vox ? " · ilk kullanımda kurulur (~8 GB indirme)" : "";
     return `<button type="button" class="mopt${S.tts === id ? " on" : ""}${m.rec ? " rec" : ""}" data-tts="${id}"><span>${m.name}</span>` +
       `<em>${m.note}${inst}${pm != null ? ` · 1 dk ≈ ${Math.round(pm)} sn` : ""}</em></button>`;
-  }).join("") + `<div class="mnote">VoxCPM2 her cümleyi videodaki kişinin kendi sesinden kopyalar; kadın / erkek ayrımına gerek kalmaz.</div>`;
+  }).join("") + `<div class="mnote">Seçilen model bütün cümleleri okur. VoxCPM2 her cümleyi videodaki kişinin kendi
+    sesinden kopyalar; diğerleri tek bir hazır Türkçe sesle okur (kadın / erkek fark etmeksizin). Ahenk modellerinde her
+    cümlenin duygusu (kızgın, neşeli, üzgün, sakin, şaşkın, şefkatli, gülerek) İngilizce metinden ve orijinal sesin
+    şiddetinden bulunup modele bildirilir.</div>`;
   if (k === "sep") return Object.entries(SEP_MODELS).map(([id, m]) =>
     `<button type="button" class="mopt${S.sep === id ? " on" : ""}${m.slow ? " slow" : ""}" data-sep="${id}"><span>${m.name}</span><em>${m.note}</em></button>`).join("");
   return Object.entries(MT_MODELS).map(([id, m], i) => {
@@ -804,34 +828,41 @@ function drawBufLen() {
   for (const b of $$("#bufLens button")) b.classList.toggle("on", +b.dataset.l === S.bufLen);
 }
 $("#bufLens").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b || !S.bufOn) return; S.bufLen = +b.dataset.l; drawDubPanel(); });
-const voxSteps = () => (isPreset() ? PRESETS[S.mode].steps : S.voxSteps);
+/* adım sayısı: her ses modeli kendi seçimini tutar (VoxCPM2 standart 10; Ahenk / Ahenk Cep 16) */
+S.stepsBy = Object.fromEntries(Object.entries(STEP_TTS).map(([k, m]) => [k, m.def]));
+const stepsOf = (id) => S.stepsBy[id] ?? STEP_TTS[id]?.def;
+const voxSteps = () => (isPreset() ? PRESETS[S.mode].steps : stepsOf(stepTts()) || 10);
 const bufParams = () => ({ buffering: S.bufOn, chunk_len: S.bufLen, vox_steps: voxSteps() });
-/* VoxCPM2 adım sayısı: 4–30, standart 10 */
-S.voxSteps = 10;                                       // 5 · 10 (önerilen) · 20 · 30 (yavaş)
 function drawVoxSteps() {
-  $("#voxField").hidden = !usesVox();
+  const id = stepTts();
+  $("#voxField").hidden = !id;
   const pre = isPreset();
   $("#voxSteps").hidden = pre;
   $("#voxLock").hidden = !pre;
+  if (!id) return;
+  $("#voxName").textContent = STEP_TTS[id].name;
   if (pre) {
     const n = PRESETS[S.mode].steps, pm = perMin("tts:vox:" + n);
     $("#voxLock").innerHTML = `<b>${n} adım</b><span>${MODES[S.mode]} modunda sabit${pm != null ? ` · 1 dk video ≈ ${Math.round(pm)} sn` : ""}</span>` +
       `<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`;
-    $("#voxNote").textContent = n <= 5 ? "Az adım: dublaj daha hızlı hazırlanır; ses biraz daha az doğal olabilir. Ayarları değiştirmek için Gelişmiş modu seçin."
-      : "Hız ve doğallık dengesi için önerilen ayar. Ayarları değiştirmek için Gelişmiş modu seçin.";
+    $("#voxNote").textContent = (n >= 20 ? "Çok adım: ses daha doğal ve ayrıntılı olur ama dublaj daha yavaş hazırlanır."
+      : n <= 5 ? "Az adım: dublaj daha hızlı hazırlanır; ses biraz daha az doğal olabilir."
+      : "Hız ve doğallık dengesi için önerilen ayar.") + " Ayarları değiştirmek için Gelişmiş modu seçin.";
     return;
   }
-  for (const b of $$("#voxSteps button")) {
-    const n = +b.dataset.s, pm = perMin("tts:vox:" + n);
-    b.classList.toggle("on", n === S.voxSteps);
-    b.title = pm != null ? `Ölçülen: 1 dk video ≈ ${Math.round(pm)} sn` : "Henüz ölçülmedi";
-  }
-  $("#voxNote").textContent = S.voxSteps >= 20
-    ? "Çok adım sesi daha doğal ve ayrıntılı yapar ama dublaj belirgin şekilde yavaşlar."
-    : S.voxSteps <= 5 ? "Az adım dublajı hızlandırır; ses biraz daha az doğal olabilir."
-    : "Hız ve doğallık dengesi için önerilen ayar.";
+  const cur = stepsOf(id), def = STEP_TTS[id].def;
+  $("#voxSteps").innerHTML = STEP_TTS[id].steps.map(([n, tag]) => {
+    const pm = perMin(`tts:${id}:${n}`);
+    return `<button type="button" data-s="${n}" class="${n === cur ? "on" : ""}${tag === "yavaş" ? " slow" : ""}"` +
+      ` title="${pm != null ? `Ölçülen: 1 dk video ≈ ${Math.round(pm)} sn` : "Henüz ölçülmedi"}"><b>${n}</b><em>${tag || "&nbsp;"}</em></button>`;
+  }).join("");
+  const ahenk = AHENK.has(id) ? " Ahenk'in kendi ölçümleri 16 adımla yapıldı." : "";
+  $("#voxNote").textContent = (cur > def
+    ? "Çok adım sesi daha doğal ve ayrıntılı yapar ama dublaj yavaşlar."
+    : cur < def ? "Az adım dublajı hızlandırır; ses biraz daha az doğal olabilir."
+    : "Hız ve doğallık dengesi için önerilen ayar.") + ahenk;
 }
-$("#voxSteps").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; S.voxSteps = +b.dataset.s; drawVoxSteps(); drawEta(); });
+$("#voxSteps").addEventListener("click", (e) => { const b = e.target.closest("button"); const id = stepTts(); if (!b || !id || isPreset()) return; S.stepsBy[id] = +b.dataset.s; drawVoxSteps(); drawEta(); });
 /* her “Dublajı Başlat / Tekrar Dublajla”da: yuvarlak başlangıç çubuğuna gider, işlem oradan başlar */
 function toRangeStart() {
   S.autoplay = false;
@@ -844,7 +875,9 @@ const isDone = () => S.av && S.status && S.status.complete;
    bu bilgisayarda gözlenen yaklaşık değerler kullanılır */
 const ETA_GUESS = { "sep:uvr": 12.5, "sep:bandit2": 62, "sep:tiger": 62, "asr:whisper-turbo": 6.5, "gender:vgc": 0.5,
   "mt:milmmt4": 4.5, "mt:hymt7": 6.5, "tts:ema": 1.7, "tts:antalia": 1.7, "tts:ema+antalia": 1.8,
-  "tts:vox:4": 42, "tts:vox:5": 50, "tts:vox:10": 72, "tts:vox:20": 115, "tts:vox:30": 160 };
+  "tts:vox:4": 42, "tts:vox:5": 50, "tts:vox:10": 72, "tts:vox:20": 115, "tts:vox:30": 160, "emo:jh": 1.5,
+  "tts:ahenkcep:4": 2, "tts:ahenkcep:8": 2, "tts:ahenkcep:16": 2.2, "tts:ahenkcep:32": 2.6,
+  "tts:ahenk:10": 55, "tts:ahenk:16": 80, "tts:ahenk:20": 95, "tts:ahenk:30": 135 };
 function etaInfo() {
   if (!S.video) return null;
   const v = variant(), p = parseV(v), [a, b] = fullRange();
@@ -855,6 +888,7 @@ function etaInfo() {
   const left = same ? Math.max(0, b - a - (S.status.ready_dur || 0)) : b - a;
   const keys = [statKey("separate", v), statKey("transcribe", v)];
   if (p.det || v === "hizli-oto") keys.push("gender:vgc");
+  if (AHENK.has(p.tts)) keys.push("emo:jh");
   keys.push(statKey("translate", v), statKey("dub", v));
   return { keys, sec: left, running: same && S.status.running };
 }
@@ -865,7 +899,7 @@ function drawEta() {
   let t = 0, guess = false;
   for (const k of e.keys) { let pm = perMin(k); if (pm == null) { pm = ETA_GUESS[k] ?? 10; guess = true; } t += (pm * e.sec) / 60; }
   const L = S.bufOn ? S.bufLen : 150;
-  t = t * 1.1 + Math.ceil(e.sec / L) * (p.tts === "vox" ? 20 : 6);       // model yükleme payı (parça başına)
+  t = t * 1.1 + Math.ceil(e.sec / L) * (p.tts === "vox" || p.tts === "ahenk" ? 20 : 6);   // model yükleme payı (parça başına)
   const txt = t < 60 ? "<1 dk" : t < 3600 ? `~${Math.round(t / 60)} dk` : `~${Math.floor(t / 3600)} sa ${Math.round((t % 3600) / 60)} dk`;
   el.innerHTML = `${txt}<small>${e.running ? "kalan · tahmini" : "tahmini"}</small>`;
   el.title = `Seçili ${fmt(e.sec)} için, Modeller menüsündeki hız ölçümlerine göre` +
@@ -889,10 +923,11 @@ function drawDubPanel() {
   $("#bufTg").checked = S.bufOn;
   $("#lenRow").classList.toggle("off", !S.bufOn);
   drawBufLen();
-  const slowNote = usesVox() ? "VoxCPM2 kullanıldığı için dublaj uzun sürer; buffering açıkken ilk parça hazır olur olmaz izlemeye başlarsınız. İsterseniz kapatabilirsiniz. " : "";
+  const slow = slowTts();
+  const slowNote = slow ? `${slow} kullanıldığı için dublaj uzun sürer; buffering açıkken ilk parça hazır olur olmaz izlemeye başlarsınız. İsterseniz kapatabilirsiniz. ` : "";
   $("#bufNote").textContent = S.bufOn
     ? slowNote + `Video yaklaşık ${Math.round(L / 60)} dakikalık parçalara bölünür (cümle ortasından bölünmez). İlk parça hazır olunca oynatma kendiliğinden başlar; sonrakiler siz izlerken hazırlanır.`
-    : (usesVox() ? "VoxCPM2 kullanıldığı için tamamının hazırlanması uzun sürer; buffering açık daha rahat olur. " : "") +
+    : (slow ? `${slow} kullanıldığı için tamamının hazırlanması uzun sürer; buffering açık daha rahat olur. ` : "") +
       "Önce seçili aralığın tamamı hazırlanır, bitince dublajlı oynatma kendiliğinden başlar.";
   const v = variant(), go = $("#goBtn"), hint = $("#goHint");
   const same = S.av === v && S.status?.variant === v;
@@ -913,7 +948,7 @@ const labelOf = (v) => { const p = parseV(v);
   if (!p.det) return v === "hizli-kadin" ? "Hızlı · Kadın" : v === "hizli-oto" ? "Hızlı · Otomatik" : "Hızlı · Erkek";
   if (p.preset) return `${MODES[p.preset]} · VoxCPM2 ${PRESETS[p.preset].steps} adım`;
   return "Gelişmiş" + (p.sep !== "uvr" ? " · " + (SEP_MODELS[p.sep]?.name.split(" ·")[0] || "") : "") +
-    (p.mt !== MT_DEFAULT ? " · " + (MT_MODELS[p.mt]?.name || "") : "") + (p.tts === "vox" ? " · VoxCPM2" : ""); };
+    (p.mt !== MT_DEFAULT ? " · " + (MT_MODELS[p.mt]?.name || "") : "") + (p.tts !== "std" ? " · " + TTS_NAME(p.tts) : ""); };
 $("#modeSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; S.mode = b.dataset.m; store.set("mode", S.mode); drawDubPanel(); });
 $$(".voice").forEach((b) => b.addEventListener("click", () => { S.gender = b.dataset.g; store.set("gender", S.gender); drawDubPanel(); }));
 $("#pDub .ptabs").addEventListener("click", () => $("#pDub").classList.toggle("folded"));
@@ -1200,6 +1235,13 @@ function showAbout() {
       Gönül rahatlığıyla, tepe tepe kullanın!</p>
     <h4>Claude ile geliştirildi</h4>
     <p>Bu program, Anthropic'in yapay zekâ asistanı <b>Claude</b> ile birlikte geliştirildi.</p>
+    <h4>Ahenk ses modelleri</h4>
+    <p>Gelişmiş moddaki deneysel <b>Ahenk</b> ve <b>Ahenk Cep</b> Türkçe ses modelleri Özgür Güler'e aittir
+      (${LINK("https://huggingface.co/ozgurguler/ahenk-tts-tr", "Ahenk")} ·
+      ${LINK("https://huggingface.co/ozgurguler/ahenk-cep-tr", "Ahenk Cep")}, CC BY 4.0). Türkçe metin
+      düzeltici trnorm (Apache-2.0) da aynı projedendir. Cümlelerin duygusu J. Hartmann'ın
+      ${LINK("https://huggingface.co/j-hartmann/emotion-english-distilroberta-base", "Emotion English DistilRoBERTa")}
+      modeliyle bulunur.</p>
     <h4>Sırada neler var?</h4>
     <p>Proje gelişmeye devam ediyor. İlerleyen sürümlerde eklemeyi planladıklarım:</p>
     <ul>
@@ -1326,13 +1368,14 @@ const KNOWN_MODELS = {
   separate: [["sep:uvr", "UVR-MDX-NET Voc FT"], ["sep:bandit2", "BandIt v2 · DnR Multi"], ["sep:tiger", "TIGER-DnR"]],
   transcribe: [["asr:whisper-turbo", "Whisper Large V3 Turbo"]],
   gender: [["gender:vgc", "Voice Gender Classifier"]],
+  emotion: [["emo:jh", "Emotion DistilRoBERTa + ses şiddeti"]],
   translate: Object.entries(MT_MODELS).map(([k, m]) => ["mt:" + k, m.name]),
   dub: [["tts:ema", "EMA Lightning"], ["tts:antalia", "Antalia-2 Mini"], ["tts:ema+antalia", "EMA Lightning + Antalia-2 Mini"],
-        ["tts:vox:4", "VoxCPM2 · 4 adım"], ["tts:vox:5", "VoxCPM2 · 5 adım"], ["tts:vox:10", "VoxCPM2 · 10 adım"], ["tts:vox:20", "VoxCPM2 · 20 adım"],
-        ["tts:vox:30", "VoxCPM2 · 30 adım"]],
+        ["tts:vox:4", "VoxCPM2 · 4 adım"], ...Object.entries(STEP_TTS).flatMap(([id, m]) =>
+          m.steps.map(([n]) => [`tts:${id}:${n}`, `${TTS_MODELS[id].name} · ${n} adım`]))],
 };
 const STAGE_TITLES = [["separate", "Ses ayırma"], ["transcribe", "İngilizce metin"], ["gender", "Kadın / erkek ayırma"],
-                      ["translate", "Türkçe çeviri"], ["dub", "Türkçe ses"]];
+                      ["emotion", "Duygu algılama"], ["translate", "Türkçe çeviri"], ["dub", "Türkçe ses"]];
 async function loadStats() { try { S.stats = await api("/api/stats"); } catch { /* sunucu yoksa boş */ } return S.stats; }
 async function showModels() {
   const st = (await loadStats()) || { models: [] };

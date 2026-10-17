@@ -17,8 +17,11 @@ Türkçe seslendirir. Arka plandaki müzik ve efektler korunur; dublaj videoyla 
 
 - **Hızlı mod:** kadın, erkek ya da otomatik (kadınlar kadın, erkekler erkek sesiyle) hazır Türkçe sesler
 - **Orta ve Güçlü mod:** VoxCPM2 ile her cümle konuşanın kendi sesinden kopyalanır; vurgu, hız ve duygu taşınır
-  (hazır ayarlar: Orta 4 adım, Güçlü 10 adım)
-- **Gelişmiş mod:** ses ayırma, çeviri ve ses modelleriyle VoxCPM2 adım sayısı serbestçe seçilir
+  (hazır ayarlar: Orta 10 adım, Güçlü 20 adım)
+- **Gelişmiş mod:** ses ayırma, çeviri ve ses modeli (VoxCPM2 · EMA Lightning · Antalia-2 Mini · Ahenk Cep · Ahenk)
+  ile adım sayısı serbestçe seçilir; seçilen ses modeli bütün cümleleri okur. Deneysel **Ahenk / Ahenk Cep**'te her
+  cümlenin duygusu (kızgın, neşeli, üzgün, sakin, şaşkın, şefkatli, gülerek) İngilizce metinden ve orijinal sesten
+  bulunup modele bildirilir
 - **Parça parça işleme:** ilk bölüm hazır olur olmaz izlemeye başlarsınız, kalanı arkada hazırlanır
 - **YouTube bağlantısı:** video indirilmeden izlenir, dublaj için yalnız ses indirilir
 - Türkçe / İngilizce altyazı, konuşmacı noktaları, ses karıştırıcı, dışa aktarma (MP4 / WAV)
@@ -89,7 +92,9 @@ Her birinin kendi lisansı geçerlidir.
 | İngilizce metin | [Whisper Large V3 Turbo](https://huggingface.co/openai/whisper-large-v3-turbo) · [faster-whisper](https://github.com/SYSTRAN/faster-whisper) |
 | Kadın / erkek ayırma | [voice-gender-classifier](https://huggingface.co/Alice-Sabrina-Ivy/voice-gender-classifier-onnx-q8-v2) · [WeSpeaker ResNet34-LM](https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM) |
 | Türkçe çeviri | [MiLMMT-46 4B](https://huggingface.co/mradermacher/MiLMMT-46-4B-v1.0-GGUF) · [Hy-MT2 7B](https://huggingface.co/tencent/Hy-MT2-7B-GGUF) · [llama.cpp](https://github.com/ggml-org/llama.cpp) |
-| Türkçe ses | [EMA Lightning](https://pypi.org/project/ema-lightning/) · [Antalia-2 Mini](https://pypi.org/project/antalia-mini/) · [VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) |
+| Türkçe ses | [EMA Lightning](https://pypi.org/project/ema-lightning/) · [Antalia-2 Mini](https://pypi.org/project/antalia-mini/) · [VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) · [Ahenk](https://huggingface.co/ozgurguler/ahenk-tts-tr) · [Ahenk Cep](https://huggingface.co/ozgurguler/ahenk-cep-tr) (Özgür Güler, CC BY 4.0) |
+| Türkçe metin düzeltme | [trnorm](https://github.com/ozguradmin/ahenk-turkish-tts) (Apache-2.0; `trnorm/` klasörüne kopyalandı) |
+| Duygu algılama | [Emotion English DistilRoBERTa-base](https://huggingface.co/j-hartmann/emotion-english-distilroberta-base) (Jochen Hartmann, 2022) · [ONNX kopyası](https://huggingface.co/onnx-community/emotion-english-distilroberta-base-ONNX) |
 | Diğer | [PyTorch](https://pytorch.org) · [pywebview](https://github.com/r0x0r/pywebview) · [yt-dlp](https://github.com/yt-dlp/yt-dlp) · [Deno](https://deno.com) |
 
 ## İletişim

@@ -15,6 +15,9 @@ Her aşama diske yazılır. Video her açılışta sıfırdan başlar.
 
 Varyantlar:  hizli-kadin · hizli-erkek · hizli-oto            (Hızlı)
              detayli · detayli-bandit2 · detayli-tiger  (kadın/erkek otomatik; ayırma modeli)
+             ses modeli eki: ~vox · ~ema · ~antalia · ~ahenkcep · ~ahenk (Gelişmiş; seçilen model bütün cümleleri okur,
+             ek yoksa eski EMA + Antalia çifti). Ahenk'lilerde "Duygu Algılama" aşaması da çalışır (her cümlenin
+             duygusu modele talimat olarak gider)
 """
 from __future__ import annotations
 
@@ -34,7 +37,7 @@ import numpy as np
 import engine as E
 
 CHUNK_LEN, CHUNK_MIN, CHUNK_MAX, NOBUF_LEN = 120.0, 60.0, 1200.0, 150.0   # buffering parça süresi (2·5·10·20 dk)
-VOX_STEPS_MIN, VOX_STEPS_MAX = 4, 30   # VoxCPM2 difüzyon adımı (belgelerde önerilen aralık; varsayılan 10)
+VOX_STEPS_MIN, VOX_STEPS_MAX = 4, 32   # difüzyon adımı (VoxCPM2 4–30, varsayılan 10; Ahenk / Ahenk Cep varsayılan 16)
 SEARCH = 12.0                     # parça sonu: hedefin ± bu kadar sn içindeki en uygun konuşma boşluğu
 SEPS = {"uvr": "", "bandit2": "BandIt v2", "tiger": "TIGER-DnR"}
 SLOW_SEPS = {"bandit2", "tiger"}
@@ -42,9 +45,14 @@ BASES = ("hizli-kadin", "hizli-erkek", "hizli-oto", "detayli", "detayli-bandit2"
 KEEP = {"_webview"}                       # calisma/ içinde silinmeyenler
 # Varyant: "<mod>[-<ayırma>][~<çeviri modeli>][~<ses modeli>]"  ör. "detayli-tiger~hymt7~vox";
 # varsayılan çeviri (MiLMMT) ve varsayılan ses (EMA + Antalia) için ek yok
-TTS_KEYS = {"vox": "VoxCPM2"}
+# Gelişmiş'te her ses modeli tek başına seçilir ve bütün cümleleri o okur (VoxCPM2 her konuşanın sesini kopyalar)
+TTS_KEYS = {"vox": "VoxCPM2", "ema": "EMA Lightning", "antalia": "Antalia-2 Mini", "ahenkcep": "Ahenk Cep",
+            "ahenk": "Ahenk"}
+AHENK_TTS = {"ahenkcep", "ahenk"}         # algılanan duyguyla okur
+TTS_VOICE = {"ema": "kadin", "antalia": "erkek"}   # tek sesli hazır modeller (engine.dub'daki ses adı)
+STEP_DEFAULT = {"vox": E.VOX_STEPS, "ahenkcep": E.AHENK_STEPS, "ahenk": E.AHENK_STEPS}
 # Hazır modlar (ayarları kilitli): UVR + MiLMMT + VoxCPM2, sabit adım sayısıyla. Varyant: "detayli~vox~orta"
-PRESETS = {"orta": 4, "guclu": 10}
+PRESETS = {"orta": 10, "guclu": 20}
 
 
 def preset_of(variant: str):
@@ -72,6 +80,7 @@ def valid_variant(variant: str) -> bool:
     pre = [o for o in opts if o in PRESETS]
     return (base in BASES and len(opts) == len(set(opts))
             and all(o in E.MT_MODELS or o in TTS_KEYS or o in PRESETS for o in opts)
+            and sum(o in TTS_KEYS for o in opts) <= 1
             and (base.startswith("detayli") or (mt == E.MT_DEFAULT and tts == "std"))
             and (not pre or (len(pre) == 1 and base == "detayli" and tts == "vox" and mt == E.MT_DEFAULT)))
 
@@ -129,9 +138,12 @@ def stages_for(variant: str) -> list:
     st = [("separate", "Ses Ayırma" + (f" ({sep})" if sep else "")), ("transcribe", "İngilizce Metin")]
     if uses_gender(variant):
         st.append(("gender", "Kadın / Erkek Ayırma"))
+    t = tts_of(variant)
+    if t in AHENK_TTS:
+        st.append(("emotion", "Duygu Algılama"))
     mt = mt_of(variant)
     st += [("translate", "Türkçe Çeviri" + (f" ({E.MT_MODELS[mt]['name']})" if mt != E.MT_DEFAULT else "")),
-           ("dub", "Türkçe Dublaj" + (" (VoxCPM2)" if tts_of(variant) == "vox" else ""))]
+           ("dub", "Türkçe Dublaj" + (f" ({TTS_KEYS[t]})" if t in TTS_KEYS else ""))]
     return st
 
 
@@ -189,7 +201,7 @@ def build_sentences(words: list) -> list:
 # ------------------------------------------------------------------ model hızları (kalıcı)
 STATS_FILE = E.BASE / ("model_hizlari_demo.json" if E.DEMO else "model_hizlari.json")
 STAGE_GROUPS = [("separate", "Ses ayırma"), ("transcribe", "İngilizce metin"), ("gender", "Kadın / erkek ayırma"),
-                ("translate", "Türkçe çeviri"), ("dub", "Türkçe ses")]
+                ("emotion", "Duygu algılama"), ("translate", "Türkçe çeviri"), ("dub", "Türkçe ses")]
 SEP_NAMES = {"uvr": "UVR-MDX-NET Voc FT", "bandit2": "BandIt v2 · DnR Multi", "tiger": "TIGER-DnR"}
 
 
@@ -202,12 +214,15 @@ def stage_model(stage: str, variant: str) -> tuple:
         return "asr:whisper-turbo", "Whisper Large V3 Turbo"
     if stage == "gender":
         return "gender:vgc", "Voice Gender Classifier"
+    if stage == "emotion":
+        return "emo:jh", "Emotion DistilRoBERTa + ses şiddeti"
     if stage == "translate":
         mt = mt_of(variant)
         return "mt:" + mt, E.MT_MODELS[mt]["name"]
     if stage == "dub":
-        if tts_of(variant) == "vox":
-            return "tts:vox", "VoxCPM2"
+        t = tts_of(variant)
+        if t in TTS_KEYS:
+            return "tts:" + t, TTS_KEYS[t]
         if uses_gender(variant):
             return "tts:ema+antalia", "EMA Lightning + Antalia-2 Mini"
         return ("tts:ema", "EMA Lightning") if variant.endswith("kadin") else ("tts:antalia", "Antalia-2 Mini")
@@ -369,7 +384,7 @@ class Job:
         self.stage_state = {}        # parça no → {aşama: (durum, ilerleme, ayrıntı)}
         self.seed = 0                # "Tekrar Dublajla" yeni tohumla farklı okuma üretir
         self.chunk_len = CHUNK_LEN   # buffering açıkken parça süresi (cümle sınırına oturtulur)
-        self.vox_steps = 10          # VoxCPM2 adım sayısı (az: hızlı, çok: daha doğal)
+        self.vox_steps = STEP_DEFAULT.get(tts_of(variant), 10)   # ses modelinin adım sayısı (az: hızlı, çok: doğal)
         self.timing = {}             # aşama → bu dublajda harcanan sn (önbellekten gelenler hariç)
         self.timing_video = {}       # aşama → işlenen video sn
         self.range = (0.0, video.duration)
@@ -612,13 +627,14 @@ class Manager:
         tr = (load_json(d / fname_mt(variant, "tr.json"), {}) or {}).get("tr", [])
         raw = dub_file(variant)
         dj = load_json(d / (raw[:-4] + ".json"), {}) or {}
-        voices, timings = dj.get("voices", []), dj.get("timings", [])
+        voices, timings, emos = dj.get("voices", []), dj.get("timings", []), dj.get("emotions", [])
         segs = []
         for i, s in enumerate(asr.get("segments", [])):
             t = timings[i] if i < len(timings) else None
             segs.append({"start": round(a + s["start"], 3), "end": round(a + s["end"], 3), "en": s["en"],
                          "tr": tr[i] if i < len(tr) else "", "g": voices[i] if i < len(voices) else None,
-                         "ds": round(a + t[0], 3) if t else None, "de": round(a + t[1], 3) if t else None})
+                         "ds": round(a + t[0], 3) if t else None, "de": round(a + t[1], 3) if t else None,
+                         **({"emo": emos[i]} if i < len(emos) else {})})
         base = f"/media/{vid}/c{k:03d}/"
         audio = {"dub": f"{base}{raw}?v={int((d / raw).stat().st_mtime)}", "bg": f"{base}{fname(variant, 'inst.wav')}",
                  "en": f"{base}{fname(variant, 'vocals.wav')}"}
@@ -850,6 +866,8 @@ class Manager:
             gj = load_json(d / gname)
             sname = f"spk{sx}.json"
             spj = load_json(d / sname)
+            ename = f"emotion{sx}.json"
+            emj = load_json(d / ename)
             # çeviri ve dublaj dosyaları çeviri modeline göre ayrı olabilir: "tr<ayırma>[~<model>].json"
             trs = {g.name: (load_json(g, {}) or {}) for g in d.glob("tr*.json") if g.stem[2:].partition("~")[0] == sx}
             dubs = [g for g in d.glob("dub_*.json")
@@ -867,15 +885,17 @@ class Manager:
                 if spj is not None:
                     em = spj.get("emb", [])
                     save_json(dd / sname, {"emb": [em[i] if i < len(em) else None for i in idx]})
-                if gj is not None:
-                    lb, sc = gj.get("labels", []), gj.get("scores", [])
-                    save_json(dd / gname, {"labels": [lb[i] for i in idx if i < len(lb)],
-                                                       "scores": [sc[i] for i in idx if i < len(sc)]})
+                for gn, js in ((gname, gj), (ename, emj)):
+                    if js is not None:
+                        lb, sc = js.get("labels", []), js.get("scores", [])
+                        save_json(dd / gn, {"labels": [lb[i] for i in idx if i < len(lb)],
+                                            "scores": [sc[i] for i in idx if i < len(sc)]})
                 for name, dj in dubj.items():
-                    vo, tm = dj.get("voices", []), dj.get("timings", [])
+                    vo, tm, em = dj.get("voices", []), dj.get("timings", []), dj.get("emotions")
                     save_json(dd / name, {"voices": [vo[i] for i in idx if i < len(vo)],
                                           "timings": [([round(tm[i][0] - off, 3), round(tm[i][1] - off, 3)]
-                                                       if i < len(tm) and tm[i] else None) for i in idx]})
+                                                       if i < len(tm) and tm[i] else None) for i in idx],
+                                          **({"emotions": [em[i] for i in idx if i < len(em)]} if em else {})})
         with v.lock:
             alive = any(x["i"] == k for x in v.chunks)      # bu arada aralık değiştiyse (parçalar atıldıysa) ekleme
             if alive:
@@ -962,8 +982,8 @@ class Manager:
             job.timing[key] = job.timing.get(key, 0.0) + sec
             job.timing_video[key] = job.timing_video.get(key, 0.0) + dur
             mk, name = stage_model(key, variant)
-            if mk == "tts:vox":                       # VoxCPM2 hızı adım sayısına göre ayrı tutulur
-                mk, name = f"tts:vox:{job.vox_steps}", f"VoxCPM2 · {job.vox_steps} adım"
+            if mk in ("tts:vox", "tts:ahenk", "tts:ahenkcep"):   # adım sayısına göre ayrı tutulur
+                mk, name = f"{mk}:{job.vox_steps}", f"{name} · {job.vox_steps} adım"
             self.stats.add(key, mk, name, dur, sec)
 
         F = lambda base: d / fname(variant, base)          # noqa: E731
@@ -1031,6 +1051,26 @@ class Manager:
         else:
             voices = [variant.split("-")[1]] * len(segs)
 
+        # 2c) duygu (Ahenk modelleri): İngilizce metin + orijinal sesin şiddeti / perdesi
+        emotions = None
+        if tts_of(variant) in AHENK_TTS:
+            check()
+            on = stage("emotion")
+            ej = load_json(F("emotion.json"))
+            if ej is not None and len(ej.get("labels", [])) == len(segs):
+                done("emotion", True)
+            else:
+                t0 = time.time()
+                labels, scores = self.engine.emotions(voc_f, segs, voices, on) if segs else ([], [])
+                ej = {"labels": labels, "scores": scores}
+                save_json(F("emotion.json"), ej)
+                cnt = {}
+                for x in labels:
+                    cnt[x] = cnt.get(x, 0) + 1
+                top = ", ".join(f"{n} {E.EMO_TR.get(x, x)}" for x, n in sorted(cnt.items(), key=lambda kv: -kv[1])[:3])
+                done("emotion", detail=f"{top} · {time.time() - t0:.0f} sn")
+            emotions = ej["labels"]
+
         # 3) translation
         check()
         on = stage("translate")
@@ -1058,13 +1098,18 @@ class Manager:
             target = E.active_rms(x.mean(axis=1), sr) or 0.08
             items = [{"start": s["start"], "end": s["end"], "tr": tr[i] if i < len(tr) else "", "en": s.get("en", "")}
                      for i, s in enumerate(segs)]
-            if tts_of(variant) == "vox":               # her cümle kendi İngilizce sesinden kopyalanır (duygu dahil)
+            t = tts_of(variant)
+            if t == "vox":                             # her cümle kendi İngilizce sesinden kopyalanır (duygu dahil)
                 track, timings = self.engine.dub_vox(items, voc_f, voices, dur, target, on, seed=job.seed, work=d,
                                                      steps=job.vox_steps)
-            else:
-                track, timings = self.engine.dub(items, voices, dur, target, on, seed=job.seed)
+            elif t in AHENK_TTS:                       # bütün cümleler Ahenk ile, algılanan duyguyla
+                track, timings = self.engine.dub_ahenk(items, voc_f, emotions or [], dur, target, on,
+                                                       seed=job.seed, work=d, steps=job.vox_steps, big=t == "ahenk")
+            else:                                      # EMA / Antalia tek başına ya da (eski) kadın-erkek çifti
+                who = [TTS_VOICE[t]] * len(voices) if t in TTS_VOICE else voices
+                track, timings = self.engine.dub(items, who, dur, target, on, seed=job.seed)
             E.write_wav(d / raw, track, E.DUB_SR)
-            save_json(rawj, {"voices": voices, "timings": timings})
+            save_json(rawj, {"voices": voices, "timings": timings, **({"emotions": emotions} if emotions else {})})
             done("dub", detail=f"{time.time() - t0:.0f} sn")
 
         if not job.buffering and dur > 150.0:          # tek parça işlendi → oynatma için dilimle

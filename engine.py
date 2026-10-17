@@ -10,6 +10,10 @@ Modeller ilk kullanımda yüklenir ve uygulama açık kaldıkça ekran kartında
   dublaj       EMA Lightning (kadın) · Antalia-2 Mini (erkek)
                VoxCPM2 (Detaylı, isteğe bağlı): her cümleyi kendi İngilizce sesinden kopyalar, duygu ve hızı taşır
                (ayrı Python ortamında, .venv-vox; ilk kullanımda kendiliğinden kurulur)
+               Ahenk Cep / Ahenk (Gelişmiş, deneysel): Türkçe kadın sesi, duygu talimatıyla; seçilince bütün
+               cümleleri okur. Ahenk = VoxCPM2 + Türkçe LoRA (aynı yardımcı süreçte).
+  duygu        Emotion English DistilRoBERTa (J. Hartmann; ONNX, işlemcide; İngilizce metinden)
+               + orijinal sesin şiddeti / perdesi (Ahenk modellerine duygu talimatı olarak gider)
 """
 from __future__ import annotations
 
@@ -35,7 +39,7 @@ MODELS.mkdir(exist_ok=True)
 os.environ.setdefault("HF_HOME", str(MODELS / "hf"))
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
-VERSION = "0.4.2"
+VERSION = "0.4.3"
 DEMO = os.environ.get("DMS_DEMO") == "1"
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -487,6 +491,24 @@ def clean_translation(out: str, fallback: str) -> str:
 VOX_VENV = BASE / ".venv-vox"
 VOX_CFG, VOX_STEPS = 2.0, 10            # yönlendirme gücü, difüzyon adımı (VoxCPM2 önerilen değerler)
 
+# Ahenk (Özgür Güler · ağırlıklar CC BY 4.0, kod Apache-2.0): tek tasarlanmış kadın sesi (f022), duygu talimatlı
+AHENK_REPO, AHENK_DIR = "ozgurguler/ahenk-tts-tr", MODELS / "ahenk"          # VoxCPM2 + Türkçe LoRA (~140 MB)
+CEP_REPO, CEP_DIR = "ozgurguler/ahenk-cep-tr", MODELS / "ahenk-cep"          # küçük model (EMA Lightning, ~35 MB)
+AHENK_STEPS = 16                        # iki modelin de ölçülmüş / varsayılan adım sayısı
+EMOTIONS = ("neutral", "angry", "cheerful", "sad", "calm", "surprised", "empathetic", "laughing")
+EMO_TR = {"neutral": "düz", "angry": "kızgın", "cheerful": "neşeli", "sad": "üzgün", "calm": "sakin",
+          "surprised": "şaşkın", "empathetic": "şefkatli", "laughing": "gülerek"}
+# duygu algılama: Emotion English DistilRoBERTa-base (J. Hartmann, 2022; onnx-community ONNX kopyası, ~83 MB)
+# 7 etiket (anger, disgust, fear, joy, neutral, sadness, surprise) → Ahenk'in duyguları
+EMO_REPO, EMO_DIR = "onnx-community/emotion-english-distilroberta-base-ONNX", MODELS / "emotion-jh"
+EMO_MAP = {"anger": "angry", "disgust": "angry", "joy": "cheerful", "sadness": "sad", "surprise": "surprised",
+           "neutral": "neutral", "fear": "fear"}
+EMO_MIN = 0.40                          # en olası duygu bundan zayıfsa düz okunur
+LAUGH_RE = re.compile(r"\b(ha(ha)+|he(he)+|lol)\b|\((laugh|chuckl)|\[(laugh|chuckl)", re.I)
+COMFORT_RE = re.compile(r"\b(don'?t worry|it'?s (ok(ay)?|alright|all right)|calm down|deep breath|"
+                        r"(it|everything)('?ll| will) be (ok(ay)?|fine|alright)|i'?m here for you|"
+                        r"sorry for your|not your fault|i understand)\b", re.I)
+
 
 def vox_python() -> Path | None:
     for c in (VOX_VENV / "Scripts" / "python.exe", VOX_VENV / "bin" / "python"):
@@ -505,6 +527,7 @@ class VoxProc:
     def __init__(self):
         self.proc = None
         self.sr = 48000
+        self.ahenk = False                           # süreç Ahenk LoRA'sıyla mı açıldı
         self.lock = threading.Lock()
 
     def running(self) -> bool:
@@ -581,20 +604,26 @@ class VoxProc:
             if isinstance(j, dict):
                 return j
 
-    def ensure(self, on):
-        if self.running():
+    def ensure(self, on, lora: Path | None = None):
+        """lora: Ahenk klasörü — süreç LoRA'sız açıksa LoRA'yla yeniden başlatılır (LoRA'lı süreç ikisini de yapar)."""
+        if self.running() and (lora is None or self.ahenk):
             return
+        self.stop()
         if not vox_ready():
             self.install(on)
         have = _has_files(MODELS / "voxcpm", "*.safetensors")
+        name = "VoxCPM2 + Ahenk" if lora else "VoxCPM2"
         for attempt in (1, 2):                       # ilk yükleme kapanırsa bir kez daha denenir
-            msg = "VoxCPM2 yükleniyor" if have or attempt == 2 else \
-                "VoxCPM2 indiriliyor (~5 GB, yalnızca bir kez) ve yükleniyor"
+            msg = f"{name} yükleniyor" if have or attempt == 2 else \
+                f"{name} indiriliyor (~5 GB, yalnızca bir kez) ve yükleniyor"
             on("indiriliyor", 0, msg + (" · yeniden deneniyor" if attempt == 2 else ""))
             env = dict(os.environ, DMS_VOX_CACHE=str(MODELS / "voxcpm"), PYTHONIOENCODING="utf-8",
                        PYTHONFAULTHANDLER="1")
+            env.pop("DMS_VOX_LORA", None)
+            if lora:
+                env["DMS_VOX_LORA"] = str(lora)
             err = open(BASE / "voxcpm.log", "a", encoding="utf-8", errors="replace")
-            err.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} VoxCPM2 başlatılıyor (deneme {attempt}) =====\n")
+            err.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} {name} başlatılıyor (deneme {attempt}) =====\n")
             err.flush()
             self.proc = subprocess.Popen([str(vox_python()), "-u", str(BASE / "vox_worker.py")], stdin=subprocess.PIPE,
                                          stdout=subprocess.PIPE, stderr=err, text=True, encoding="utf-8",
@@ -610,6 +639,7 @@ class VoxProc:
         if not j.get("ready"):
             raise RuntimeError("VoxCPM2 başlatılamadı (voxcpm.log)")
         self.sr = int(j.get("sr", 48000))
+        self.ahenk = bool(j.get("ahenk"))
 
     def run(self, req: dict) -> dict:
         with self.lock:
@@ -628,6 +658,7 @@ class VoxProc:
             except Exception:  # noqa: BLE001
                 self.proc.kill()
         self.proc = None
+        self.ahenk = False
 
 
 def atempo(a: np.ndarray, sr: int, f: float, tmpdir: Path) -> np.ndarray:
@@ -651,8 +682,9 @@ class Engine:
         self._gender = None
         self._spk = None
         self._llama = LlamaServer()
-        self._tts = {}
+        self._tts = {}                 # "kadin" EMA · "erkek" Antalia · "ahenkcep" Ahenk Cep
         self._vox = VoxProc()
+        self._emo = None               # go_emotions (işlemcide)
 
     # ---- ekran kartı belleği (8 GB kartlarda modeller sırayla yer açar)
     def make_room(self, need_mb: int, keep: tuple = ()) -> None:
@@ -1160,6 +1192,224 @@ class Engine:
                     timings.append([round(start, 3), round(start + d, 3)])
                     cursor = start + d + 0.05
                     on("calisiyor", (i + 1) / max(1, n) * 100, f"{i + 1}/{n} cümle")
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+            cur = active_rms(track, DUB_SR)
+            if target_rms > 0 and cur > 0:
+                track *= float(np.clip(target_rms / cur, 0.25, 4.0))
+            peak = float(np.abs(track).max() or 1.0)
+            if peak > 0.98:
+                track *= 0.98 / peak
+            return track, timings
+
+    # ---- 2d) duygu: İngilizce metin + orijinal sesin şiddeti / perdesi → Ahenk'in duyguları
+    def _emo_model(self, on):
+        if self._emo is None:
+            import onnxruntime as ort
+            from huggingface_hub import hf_hub_download
+            from tokenizers import Tokenizer
+            with download_watch(on, "Duygu modeli", [EMO_DIR], 85,
+                                (EMO_DIR / "onnx" / "model_quantized.onnx").exists()):
+                p = {f: hf_hub_download(EMO_REPO, f, local_dir=str(EMO_DIR))
+                     for f in ("onnx/model_quantized.onnx", "tokenizer.json", "config.json")}
+            cfg = json.loads(Path(p["config.json"]).read_text(encoding="utf-8"))
+            labels = [cfg["id2label"][str(i)] for i in range(len(cfg["id2label"]))]
+            tok = Tokenizer.from_file(p["tokenizer.json"])
+            tok.enable_truncation(128)
+            so = ort.SessionOptions()
+            so.intra_op_num_threads = 4
+            sess = ort.InferenceSession(p["onnx/model_quantized.onnx"], sess_options=so,
+                                        providers=["CPUExecutionProvider"])
+            self._emo = (sess, tok, labels)
+        return self._emo
+
+    def _emo_text(self, texts: list, on) -> tuple[np.ndarray, list]:
+        """Her cümle için 7 duygunun olasılığı (toplamı 1)."""
+        sess, tok, labels = self._emo_model(on)
+        out = []
+        for t in texts:                                  # tek tek: dolgu (padding) sonucu etkilemesin
+            e = tok.encode(t or ".")
+            lg = sess.run(None, {"input_ids": np.array([e.ids], dtype=np.int64),
+                                 "attention_mask": np.array([e.attention_mask], dtype=np.int64)})[0][0]
+            p = np.exp(lg - lg.max())
+            out.append(p / p.sum())
+        return np.array(out), labels
+
+    @staticmethod
+    def _emo_audio(mono: np.ndarray, sr: int, segs: list) -> list:
+        """Her cümlenin ses şiddeti (dB) ve perdesi (yarım ton): (db, st) ya da None."""
+        import librosa
+        x16 = resample(mono, sr, 16000)
+        out = []
+        for s in segs:
+            a = x16[max(0, int(s["start"] * 16000)): int(s["end"] * 16000)]
+            if len(a) < 0.3 * 16000:
+                out.append(None)
+                continue
+            db = 20 * np.log10(active_rms(a, 16000) + 1e-6)
+            f0 = librosa.yin(a, fmin=65, fmax=500, sr=16000, frame_length=1024, hop_length=320)
+            n = min(len(f0), len(a) // 320)
+            fr = np.sqrt(np.array([np.mean(a[j * 320:(j + 1) * 320] ** 2) for j in range(n)]) + 1e-12)
+            voiced = f0[:n][fr > fr.max() * 0.15] if n else f0
+            st = float(np.median(12 * np.log2(voiced / 100.0))) if len(voiced) >= 5 else None
+            out.append((float(db), st))
+        return out
+
+    def emotions(self, vocals: Path, segs: list, voices: list, on) -> tuple[list, list]:
+        """Her cümleye Ahenk duygusu (EMOTIONS) ve güven puanı. Metin modeli duyguyu, orijinal ses ne kadar
+        güçlü söylendiğini verir: aynı cümle bağırarak söylendiyse 'kızgın', çok alçak ve sakinse 'sakin' olur."""
+        if DEMO:
+            time.sleep(0.3)
+            cyc = ("neutral", "cheerful", "angry", "neutral", "sad", "surprised", "calm", "empathetic")
+            return [cyc[i % len(cyc)] for i in range(len(segs))], [0.8] * len(segs)
+        if not segs:
+            return [], []
+        on("calisiyor", 5, "Cümlelerin duygusu okunuyor")
+        P, labels = self._emo_text([s.get("en", "") for s in segs], on)
+        on("calisiyor", 50, "Ses şiddeti ve perdesi ölçülüyor")
+        x, sr = read_wav(vocals)
+        feats = self._emo_audio(x.mean(axis=1), sr, segs)
+        # uyarılma (arousal): aynı cinsiyetteki cümlelere göre ne kadar yüksek sesle / tiz söylendi (z puanı)
+        arousal = [0.0] * len(segs)
+        for g in set(voices):
+            idx = [i for i, f in enumerate(feats) if f is not None and voices[i] == g]
+            if len(idx) < 4:
+                continue
+            db = np.array([feats[i][0] for i in idx])
+            st = np.array([feats[i][1] if feats[i][1] is not None else np.nan for i in idx])
+            zd = (db - np.median(db)) / max(3.0, float(np.std(db)))
+            sv = st[~np.isnan(st)]
+            zs = (st - np.median(sv)) / max(1.5, float(np.std(sv))) if len(sv) >= 4 else np.zeros_like(st)
+            for j, i in enumerate(idx):
+                arousal[i] = float(0.6 * zd[j] + 0.4 * (0.0 if np.isnan(zs[j]) else zs[j]))
+        out, conf = [], []
+        for i, s in enumerate(segs):
+            p = {n: float(P[i][j]) for j, n in enumerate(labels)}
+            en = s.get("en", "")
+            a = arousal[i]
+            top = max(p, key=p.get)
+            lab, c = EMO_MAP.get(top, "neutral"), p[top]
+            if c < EMO_MIN:
+                lab = "neutral"
+            if lab == "fear":                        # Ahenk'te korku yok: heyecanlıysa şaşkın, değilse üzgün
+                lab = "surprised" if a > 0.5 else "sad"
+            if lab == "angry" and c < 0.6 and a < -0.5:
+                lab = "neutral"                      # alçak sesle söylenen hafif kızgınlık: düz
+            if LAUGH_RE.search(en):
+                lab, c = "laughing", max(c, 0.6)
+            elif COMFORT_RE.search(en) and lab in ("neutral", "sad"):
+                lab, c = "empathetic", max(c, 0.5)   # teselli / yatıştırma
+            elif lab == "neutral":                   # metin düz: sesin kendisine bak
+                neg = p.get("anger", 0) + p.get("disgust", 0)
+                if a > 1.5 and max(neg, p.get("joy", 0), p.get("surprise", 0)) >= 0.15:
+                    lab = "angry" if neg >= max(p.get("joy", 0), p.get("surprise", 0)) else \
+                        "cheerful" if p.get("joy", 0) >= p.get("surprise", 0) else "surprised"
+                elif a < -1.3 and len(en.split()) >= 3:
+                    lab = "calm"
+            out.append(lab)
+            conf.append(round(c, 3))
+            on("calisiyor", 50 + (i + 1) / len(segs) * 50, f"{i + 1}/{len(segs)} cümle")
+        return out, conf
+
+    # ---- 4c) dublaj · Ahenk Cep / Ahenk (bütün cümleler, duygulu)
+    def _ahenk_files(self, on) -> Path:
+        if DEMO:
+            return AHENK_DIR
+        from huggingface_hub import snapshot_download
+        with download_watch(on, "Ahenk", [AHENK_DIR], 145, (AHENK_DIR / "lora_weights.safetensors").exists()):
+            snapshot_download(AHENK_REPO, allow_patterns=["lora_*", "*.py", "instructions_tr.json"],
+                              local_dir=str(AHENK_DIR))
+        return AHENK_DIR
+
+    def _cep_model(self, on):
+        if "ahenkcep" not in self._tts:
+            import importlib.util
+            import torch
+            from huggingface_hub import snapshot_download
+            if str(BASE) not in sys.path:                # trnorm proje klasöründe
+                sys.path.insert(0, str(BASE))
+            with download_watch(on, "Ahenk Cep", [CEP_DIR], 35, (CEP_DIR / "student.pt").exists()):
+                snapshot_download(CEP_REPO, allow_patterns=["student.pt", "decoder.pt", "ahenk_cep.py"],
+                                  local_dir=str(CEP_DIR))
+            spec = importlib.util.spec_from_file_location("ahenk_cep", CEP_DIR / "ahenk_cep.py")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            dev = "cuda" if torch.cuda.is_available() else "cpu"
+            cep = mod.AhenkCep(str(CEP_DIR / "student.pt"), str(CEP_DIR / "decoder.pt"), device=dev)
+            cep.engine._batch_size = 4          # EMA'daki gibi: toplu iş boyutu ölçümü dolu kartta çok yavaşlar
+            self._tts["ahenkcep"] = (cep, tuple(mod.STYLES))
+        return self._tts["ahenkcep"]
+
+    def dub_ahenk(self, segs: list, voc_path: Path, emotions: list, chunk_dur: float, target_rms: float, on,
+                  seed: int = 0, work: Path | None = None, steps: int = AHENK_STEPS,
+                  big: bool = False) -> tuple[np.ndarray, list]:
+        """Bütün cümleler Ahenk Cep (big=False) ya da Ahenk (big=True) ile, algılanan duyguyla okunur.
+        Her cümlenin ses gücü özgününe eşlenir (bağırma yüksek, fısıltı alçak)."""
+        x, sr = read_wav(voc_path)
+        mono = x.mean(axis=1) if x.ndim > 1 else x
+        n = len(segs)
+        name = "Ahenk" if big else "Ahenk Cep"
+        if not DEMO:
+            self.make_room(7200 if big else 2500, keep=("vox",) if big else ("ahenkcep",))
+        with self.lock:
+            cep = None
+            if not DEMO:
+                if big:
+                    self._vox.ensure(on, lora=self._ahenk_files(on))
+                else:
+                    cep = self._cep_model(on)
+            on("calisiyor", 0, f"0/{n} cümle")
+            tmp = (work or voc_path.parent) / "_ahenk"
+            tmp.mkdir(exist_ok=True)
+            track = np.zeros(int((chunk_dur + 6) * DUB_SR), dtype=np.float32)
+            cursor, timings = 0.0, []
+            try:
+                for i, s in enumerate(segs):
+                    text = (s.get("tr") or "").strip()
+                    if not text:
+                        timings.append(None)
+                        continue
+                    nxt = segs[i + 1]["start"] if i + 1 < n else chunk_dur + 1.0
+                    start = max(float(s["start"]), cursor)
+                    avail = max(0.4, nxt - start - 0.05)
+                    own = mono[max(0, int((s["start"] - 0.06) * sr)): max(0, min(len(mono), int((s["end"] + 0.12) * sr)))]
+                    emo = emotions[i] if i < len(emotions) else "neutral"
+                    sd = int(seed) * 1000 + i
+                    if DEMO:
+                        time.sleep(0.004 * steps * (8 if big else 1))
+                        a = trim_silence(self.say("kadin", text, 1.0, sd), DUB_SR)
+                    elif big:
+                        ow = tmp / f"o{i}.wav"
+                        self._vox.run({"ahenk": True, "text": text, "emotion": "" if emo == "neutral" else emo,
+                                       "out": str(ow), "cfg": VOX_CFG, "steps": int(steps), "seed": sd})
+                        y, ysr = read_wav(ow)
+                        a = trim_silence(resample(y.mean(axis=1) if y.ndim > 1 else y, ysr, DUB_SR), DUB_SR)
+                        if len(a) / DUB_SR > avail * 1.03:
+                            a = atempo(a, DUB_SR, min(len(a) / DUB_SR / avail, 1.35), tmp)
+                    else:
+                        model, styles = cep
+                        style = {"laughing": "cheerful"}.get(emo, emo)     # Cep'te gülme eğitilmedi
+                        style = style if style in styles else "neutral"
+
+                        def cep_say(speed):
+                            au, asr = model.say(text, style=style, steps=int(steps), speed=float(speed), seed=sd)
+                            au = np.asarray(au, dtype=np.float32).reshape(-1)
+                            return trim_silence(resample(au, int(asr), DUB_SR) if int(asr) != DUB_SR else au, DUB_SR)
+                        a = cep_say(1.0)
+                        if len(a) / DUB_SR > avail * 1.03:
+                            a = cep_say(min(len(a) / DUB_SR / avail, 1.35))
+                    a = np.asarray(a, dtype=np.float32)
+                    ro, rd = active_rms(own, sr), active_rms(a, DUB_SR)
+                    if ro > 0 and rd > 0:
+                        a = a * float(np.clip(ro / rd, 0.2, 5.0))
+                    d = len(a) / DUB_SR
+                    i0 = int(start * DUB_SR)
+                    if i0 + len(a) > len(track):
+                        track = np.concatenate([track, np.zeros(i0 + len(a) - len(track), dtype=np.float32)])
+                    track[i0:i0 + len(a)] += a
+                    timings.append([round(start, 3), round(start + d, 3)])
+                    cursor = start + d + 0.05
+                    on("calisiyor", (i + 1) / max(1, n) * 100, f"{i + 1}/{n} cümle · {name}")
             finally:
                 shutil.rmtree(tmp, ignore_errors=True)
             cur = active_rms(track, DUB_SR)

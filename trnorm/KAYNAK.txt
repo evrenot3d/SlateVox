@@ -1,0 +1,8 @@
+trnorm — Türkçe metni okunuş biçimine çeviren normalleştirici (sayı, tarih, saat, para, kısaltma ...).
+
+Kaynak : https://github.com/ozguradmin/ahenk-turkish-tts  (src/trnorm, değiştirilmeden kopyalandı)
+Yazar  : Özgür Güler
+Lisans : Apache License 2.0 (bu klasördeki LICENSE dosyası)
+
+Ahenk ve Ahenk Cep ses modelleri bu normalleştiricinin çıktısıyla eğitildiği için onlara giden metin
+önce buradan geçer. Bağımlılığı yoktur; hem ana ortamda (.venv) hem VoxCPM2 ortamında (.venv-vox) çalışır.

@@ -74,6 +74,7 @@ Source: "..\kur.ps1";           DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md";         DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\LICENSE";           DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\ui\*";              DestDir: "{app}\ui"; Flags: ignoreversion recursesubdirs
+Source: "..\trnorm\*";          DestDir: "{app}\trnorm"; Excludes: "__pycache__"; Flags: ignoreversion recursesubdirs
 Source: "logo.ico";             DestDir: "{app}"; Flags: ignoreversion
 ; kuruluma gömülü Python (EXE_OLUSTUR.bat bir kez indirir): başlatıcı ve kurulum ekranı bununla çalışır
 Source: "python\*";             DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs
