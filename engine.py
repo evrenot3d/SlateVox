@@ -7,7 +7,7 @@ Modeller ilk kullanımda yüklenir ve uygulama açık kaldıkça ekran kartında
   kadın/erkek  wav2vec2 voice gender     (onnxruntime)
   çeviri       MiLMMT-46 4B (varsayılan, Hızlı ve Detaylı) · Detaylı'da seçilebilir: Hy-MT2 7B
                (GGUF Q4_K_M, llama.cpp llama-server, CUDA; karta sığmayan katmanlar işlemciye kalır)
-  dublaj       EMA Lightning (kadın) · Antalia-2 Mini (erkek)
+  dublaj       Hızlı: Ahenk Cep (kadın, duygulu, 16 adım) · Antalia-2 Mini (erkek); Gelişmiş'te EMA Lightning de var
                VoxCPM2 (Detaylı, isteğe bağlı): her cümleyi kendi İngilizce sesinden kopyalar, duygu ve hızı taşır
                (ayrı Python ortamında, .venv-vox; ilk kullanımda kendiliğinden kurulur)
                Ahenk Cep / Ahenk (Gelişmiş, deneysel): Türkçe kadın sesi, duygu talimatıyla; seçilince bütün
@@ -39,7 +39,7 @@ MODELS.mkdir(exist_ok=True)
 os.environ.setdefault("HF_HOME", str(MODELS / "hf"))
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
-VERSION = "0.4.3"
+VERSION = "0.4.4"
 DEMO = os.environ.get("DMS_DEMO") == "1"
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -1311,7 +1311,7 @@ class Engine:
             on("calisiyor", 50 + (i + 1) / len(segs) * 50, f"{i + 1}/{len(segs)} cümle")
         return out, conf
 
-    # ---- 4c) dublaj · Ahenk Cep / Ahenk (bütün cümleler, duygulu)
+    # ---- 4c) dublaj · Ahenk Cep / Ahenk (duygulu; çiftte erkekleri Antalia-2 Mini okur)
     def _ahenk_files(self, on) -> Path:
         if DEMO:
             return AHENK_DIR
@@ -1342,18 +1342,26 @@ class Engine:
 
     def dub_ahenk(self, segs: list, voc_path: Path, emotions: list, chunk_dur: float, target_rms: float, on,
                   seed: int = 0, work: Path | None = None, steps: int = AHENK_STEPS,
-                  big: bool = False) -> tuple[np.ndarray, list]:
-        """Bütün cümleler Ahenk Cep (big=False) ya da Ahenk (big=True) ile, algılanan duyguyla okunur.
-        Her cümlenin ses gücü özgününe eşlenir (bağırma yüksek, fısıltı alçak)."""
+                  big: bool = False, voices: list | None = None) -> tuple[np.ndarray, list]:
+        """Cümleler Ahenk Cep (big=False) ya da Ahenk (big=True) ile, algılanan duyguyla okunur. voices verilirse
+        (kadın / erkek çifti) erkeklerin cümlelerini Antalia-2 Mini okur. Her cümlenin ses gücü özgününe eşlenir
+        (bağırma yüksek, fısıltı alçak)."""
         x, sr = read_wav(voc_path)
         mono = x.mean(axis=1) if x.ndim > 1 else x
         n = len(segs)
         name = "Ahenk" if big else "Ahenk Cep"
+        male = [bool(voices) and i < len(voices) and voices[i] == "erkek" for i in range(n)]
+        fem = not all(male)
         if not DEMO:
-            self.make_room(7200 if big else 2500, keep=("vox",) if big else ("ahenkcep",))
+            keep = ("vox",) if big else ("ahenkcep",)
+            self.make_room(7200 if big and fem else 2500, keep=keep + (("erkek",) if any(male) else ()))
         with self.lock:
+            if any(male) and "erkek" not in self._tts and not DEMO:
+                with download_watch(on, "Antalia-2 Mini", [MODELS / "hf"], 350, self._tts_seen("erkek")):
+                    self._tts_model("erkek")
+                (MODELS / ".tts_erkek").write_text("ok", encoding="utf-8")
             cep = None
-            if not DEMO:
+            if fem and not DEMO:
                 if big:
                     self._vox.ensure(on, lora=self._ahenk_files(on))
                 else:
@@ -1375,9 +1383,13 @@ class Engine:
                     own = mono[max(0, int((s["start"] - 0.06) * sr)): max(0, min(len(mono), int((s["end"] + 0.12) * sr)))]
                     emo = emotions[i] if i < len(emotions) else "neutral"
                     sd = int(seed) * 1000 + i
-                    if DEMO:
-                        time.sleep(0.004 * steps * (8 if big else 1))
-                        a = trim_silence(self.say("kadin", text, 1.0, sd), DUB_SR)
+                    if male[i] or DEMO:                  # erkek (çift): Antalia · demo: sahte ses
+                        g = "erkek" if male[i] else "kadin"
+                        if DEMO and not male[i]:
+                            time.sleep(0.004 * steps * (8 if big else 1))
+                        a = trim_silence(self.say(g, text, 1.0, sd), DUB_SR)
+                        if len(a) / DUB_SR > avail * 1.03:
+                            a = trim_silence(self.say(g, text, min(len(a) / DUB_SR / avail, 1.35), sd), DUB_SR)
                     elif big:
                         ow = tmp / f"o{i}.wav"
                         self._vox.run({"ahenk": True, "text": text, "emotion": "" if emo == "neutral" else emo,

@@ -15,13 +15,15 @@ Bütün yapay zekâ modelleri kendi bilgisayarınızda çalışır; videoların�
 "Doğru mu Samet?", İngilizce bir videoyu açtığınızda konuşmaları ayırır, yazıya döker, Türkçeye çevirir ve
 Türkçe seslendirir. Arka plandaki müzik ve efektler korunur; dublaj videoyla eş zamanlı çalar.
 
-- **Hızlı mod:** kadın, erkek ya da otomatik (kadınlar kadın, erkekler erkek sesiyle) hazır Türkçe sesler
+- **Hızlı mod:** kadın (Ahenk Cep, duygulu), erkek (Antalia-2 Mini) ya da otomatik (kadınları Ahenk Cep, erkekleri
+  Antalia-2 Mini okur) hazır Türkçe sesler
 - **Orta ve Güçlü mod:** VoxCPM2 ile her cümle konuşanın kendi sesinden kopyalanır; vurgu, hız ve duygu taşınır
   (hazır ayarlar: Orta 10 adım, Güçlü 20 adım)
-- **Gelişmiş mod:** ses ayırma, çeviri ve ses modeli (VoxCPM2 · EMA Lightning · Antalia-2 Mini · Ahenk Cep · Ahenk)
-  ile adım sayısı serbestçe seçilir; seçilen ses modeli bütün cümleleri okur. Deneysel **Ahenk / Ahenk Cep**'te her
-  cümlenin duygusu (kızgın, neşeli, üzgün, sakin, şaşkın, şefkatli, gülerek) İngilizce metinden ve orijinal sesten
-  bulunup modele bildirilir
+- **Gelişmiş mod:** ses ayırma, çeviri ve ses modeli ile adım sayısı serbestçe seçilir. Ses modeli tek başına
+  (VoxCPM2 · EMA Lightning · Antalia-2 Mini · Ahenk Cep · Ahenk; bütün cümleleri o okur) ya da kadın / erkek çifti
+  olarak (EMA Lightning, Ahenk Cep veya Ahenk + Antalia-2 Mini) seçilebilir
+- **Duygu:** Ahenk modelleri kullanılırken her cümlenin duygusu (kızgın, neşeli, üzgün, sakin, şaşkın, şefkatli,
+  gülerek) İngilizce metinden ve orijinal sesten bulunup modele bildirilir
 - **Parça parça işleme:** ilk bölüm hazır olur olmaz izlemeye başlarsınız, kalanı arkada hazırlanır
 - **YouTube bağlantısı:** video indirilmeden izlenir, dublaj için yalnız ses indirilir
 - Türkçe / İngilizce altyazı, konuşmacı noktaları, ses karıştırıcı, dışa aktarma (MP4 / WAV)

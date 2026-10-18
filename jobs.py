@@ -45,12 +45,15 @@ BASES = ("hizli-kadin", "hizli-erkek", "hizli-oto", "detayli", "detayli-bandit2"
 KEEP = {"_webview"}                       # calisma/ içinde silinmeyenler
 # Varyant: "<mod>[-<ayırma>][~<çeviri modeli>][~<ses modeli>]"  ör. "detayli-tiger~hymt7~vox";
 # varsayılan çeviri (MiLMMT) ve varsayılan ses (EMA + Antalia) için ek yok
-# Gelişmiş'te her ses modeli tek başına seçilir ve bütün cümleleri o okur (VoxCPM2 her konuşanın sesini kopyalar)
+# Gelişmiş'te ses modeli tek başına (bütün cümleleri o okur) ya da kadın / erkek çifti olarak seçilir
+# (çiftlerde kadınları ilki, erkekleri Antalia-2 Mini okur; ek yoksa EMA Lightning + Antalia-2 Mini çifti)
 TTS_KEYS = {"vox": "VoxCPM2", "ema": "EMA Lightning", "antalia": "Antalia-2 Mini", "ahenkcep": "Ahenk Cep",
-            "ahenk": "Ahenk"}
-AHENK_TTS = {"ahenkcep", "ahenk"}         # algılanan duyguyla okur
+            "ahenk": "Ahenk", "cepant": "Ahenk Cep + Antalia-2 Mini", "ahenkant": "Ahenk + Antalia-2 Mini"}
+AHENK_TTS = {"ahenkcep", "ahenk", "cepant", "ahenkant"}   # algılanan duyguyla okur
 TTS_VOICE = {"ema": "kadin", "antalia": "erkek"}   # tek sesli hazır modeller (engine.dub'daki ses adı)
-STEP_DEFAULT = {"vox": E.VOX_STEPS, "ahenkcep": E.AHENK_STEPS, "ahenk": E.AHENK_STEPS}
+STEP_DEFAULT = {"vox": E.VOX_STEPS, **{t: E.AHENK_STEPS for t in AHENK_TTS}}
+# Hızlı: Kadın = Ahenk Cep, Otomatik = Ahenk Cep (kadın) + Antalia (erkek), Erkek = Antalia; Ahenk Cep 16 adım sabit
+HIZLI_TTS = {"hizli-kadin": "ahenkcep", "hizli-oto": "cepant", "hizli-erkek": "antalia"}
 # Hazır modlar (ayarları kilitli): UVR + MiLMMT + VoxCPM2, sabit adım sayısıyla. Varyant: "detayli~vox~orta"
 PRESETS = {"orta": 10, "guclu": 20}
 
@@ -73,6 +76,23 @@ def split_variant(variant: str) -> tuple:
 
 def tts_of(variant: str) -> str:
     return parse_variant(variant)[2]
+
+
+def dub_tts(variant: str) -> str:
+    """dublajda gerçekten çalışan ses modeli (Hızlı'nın sesleri dahil; "std" = EMA + Antalia çifti)"""
+    return HIZLI_TTS.get(variant.split("~")[0]) or tts_of(variant)
+
+
+def uses_emotion(variant: str) -> bool:
+    return dub_tts(variant) in AHENK_TTS
+
+
+def fixed_steps(variant: str):
+    """hazır modlarda adım sayısı sabit: Orta / Güçlü (VoxCPM2), Hızlı (Ahenk Cep 16)"""
+    pre = preset_of(variant)
+    if pre:
+        return PRESETS[pre]
+    return E.AHENK_STEPS if variant.startswith("hizli") else None
 
 
 def valid_variant(variant: str) -> bool:
@@ -138,8 +158,8 @@ def stages_for(variant: str) -> list:
     st = [("separate", "Ses Ayırma" + (f" ({sep})" if sep else "")), ("transcribe", "İngilizce Metin")]
     if uses_gender(variant):
         st.append(("gender", "Kadın / Erkek Ayırma"))
-    t = tts_of(variant)
-    if t in AHENK_TTS:
+    t = dub_tts(variant)
+    if uses_emotion(variant):
         st.append(("emotion", "Duygu Algılama"))
     mt = mt_of(variant)
     st += [("translate", "Türkçe Çeviri" + (f" ({E.MT_MODELS[mt]['name']})" if mt != E.MT_DEFAULT else "")),
@@ -220,12 +240,10 @@ def stage_model(stage: str, variant: str) -> tuple:
         mt = mt_of(variant)
         return "mt:" + mt, E.MT_MODELS[mt]["name"]
     if stage == "dub":
-        t = tts_of(variant)
+        t = dub_tts(variant)
         if t in TTS_KEYS:
             return "tts:" + t, TTS_KEYS[t]
-        if uses_gender(variant):
-            return "tts:ema+antalia", "EMA Lightning + Antalia-2 Mini"
-        return ("tts:ema", "EMA Lightning") if variant.endswith("kadin") else ("tts:antalia", "Antalia-2 Mini")
+        return "tts:ema+antalia", "EMA Lightning + Antalia-2 Mini"
     return stage, stage
 
 
@@ -384,7 +402,7 @@ class Job:
         self.stage_state = {}        # parça no → {aşama: (durum, ilerleme, ayrıntı)}
         self.seed = 0                # "Tekrar Dublajla" yeni tohumla farklı okuma üretir
         self.chunk_len = CHUNK_LEN   # buffering açıkken parça süresi (cümle sınırına oturtulur)
-        self.vox_steps = STEP_DEFAULT.get(tts_of(variant), 10)   # ses modelinin adım sayısı (az: hızlı, çok: doğal)
+        self.vox_steps = STEP_DEFAULT.get(dub_tts(variant), 10)  # ses modelinin adım sayısı (az: hızlı, çok: doğal)
         self.timing = {}             # aşama → bu dublajda harcanan sn (önbellekten gelenler hariç)
         self.timing_video = {}       # aşama → işlenen video sn
         self.range = (0.0, video.duration)
@@ -491,8 +509,8 @@ class Manager:
                 self.job.chunk_len = float(np.clip(float(chunk_len), CHUNK_MIN, CHUNK_MAX))
             if vox_steps:
                 self.job.vox_steps = int(np.clip(int(vox_steps), VOX_STEPS_MIN, VOX_STEPS_MAX))
-            if preset_of(variant):                     # hazır mod: adım sayısı sabit
-                self.job.vox_steps = PRESETS[preset_of(variant)]
+            if fixed_steps(variant):                   # hazır mod: adım sayısı sabit
+                self.job.vox_steps = fixed_steps(variant)
             self._apply(self.job, v, variant, rng)
             self.job.focus = focus
             self.job.error = None
@@ -528,8 +546,8 @@ class Manager:
                 self.job.chunk_len = float(np.clip(float(chunk_len), CHUNK_MIN, CHUNK_MAX))
             if vox_steps:
                 self.job.vox_steps = int(np.clip(int(vox_steps), VOX_STEPS_MIN, VOX_STEPS_MAX))
-            if preset_of(variant):                     # hazır mod: adım sayısı sabit
-                self.job.vox_steps = PRESETS[preset_of(variant)]
+            if fixed_steps(variant):                   # hazır mod: adım sayısı sabit
+                self.job.vox_steps = fixed_steps(variant)
             self.job.seed = random.randint(1, 1_000_000)
             self._apply(self.job, v, variant, rng)
             self.job.focus = focus
@@ -982,7 +1000,7 @@ class Manager:
             job.timing[key] = job.timing.get(key, 0.0) + sec
             job.timing_video[key] = job.timing_video.get(key, 0.0) + dur
             mk, name = stage_model(key, variant)
-            if mk in ("tts:vox", "tts:ahenk", "tts:ahenkcep"):   # adım sayısına göre ayrı tutulur
+            if mk[4:] in STEP_DEFAULT:                # adım sayısı seçilebilen modeller: adıma göre ayrı tutulur
                 mk, name = f"{mk}:{job.vox_steps}", f"{name} · {job.vox_steps} adım"
             self.stats.add(key, mk, name, dur, sec)
 
@@ -1053,7 +1071,7 @@ class Manager:
 
         # 2c) duygu (Ahenk modelleri): İngilizce metin + orijinal sesin şiddeti / perdesi
         emotions = None
-        if tts_of(variant) in AHENK_TTS:
+        if uses_emotion(variant):
             check()
             on = stage("emotion")
             ej = load_json(F("emotion.json"))
@@ -1098,13 +1116,15 @@ class Manager:
             target = E.active_rms(x.mean(axis=1), sr) or 0.08
             items = [{"start": s["start"], "end": s["end"], "tr": tr[i] if i < len(tr) else "", "en": s.get("en", "")}
                      for i, s in enumerate(segs)]
-            t = tts_of(variant)
+            t = dub_tts(variant)
             if t == "vox":                             # her cümle kendi İngilizce sesinden kopyalanır (duygu dahil)
                 track, timings = self.engine.dub_vox(items, voc_f, voices, dur, target, on, seed=job.seed, work=d,
                                                      steps=job.vox_steps)
-            elif t in AHENK_TTS:                       # bütün cümleler Ahenk ile, algılanan duyguyla
+            elif t in AHENK_TTS:                       # Ahenk algılanan duyguyla; çiftlerde erkekleri Antalia okur
+                pair = t in ("cepant", "ahenkant")
                 track, timings = self.engine.dub_ahenk(items, voc_f, emotions or [], dur, target, on,
-                                                       seed=job.seed, work=d, steps=job.vox_steps, big=t == "ahenk")
+                                                       seed=job.seed, work=d, steps=job.vox_steps,
+                                                       big=t in ("ahenk", "ahenkant"), voices=voices if pair else None)
             else:                                      # EMA / Antalia tek başına ya da (eski) kadın-erkek çifti
                 who = [TTS_VOICE[t]] * len(voices) if t in TTS_VOICE else voices
                 track, timings = self.engine.dub(items, who, dur, target, on, seed=job.seed)
