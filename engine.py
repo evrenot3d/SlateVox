@@ -39,7 +39,7 @@ MODELS.mkdir(exist_ok=True)
 os.environ.setdefault("HF_HOME", str(MODELS / "hf"))
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
-VERSION = "0.4.4"
+VERSION = "0.4.5"
 DEMO = os.environ.get("DMS_DEMO") == "1"
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 

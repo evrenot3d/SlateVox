@@ -40,7 +40,8 @@ CHUNK_LEN, CHUNK_MIN, CHUNK_MAX, NOBUF_LEN = 120.0, 60.0, 1200.0, 150.0   # buff
 VOX_STEPS_MIN, VOX_STEPS_MAX = 4, 32   # difüzyon adımı (VoxCPM2 4–30, varsayılan 10; Ahenk / Ahenk Cep varsayılan 16)
 SEARCH = 12.0                     # parça sonu: hedefin ± bu kadar sn içindeki en uygun konuşma boşluğu
 SEPS = {"uvr": "", "bandit2": "BandIt v2", "tiger": "TIGER-DnR"}
-SLOW_SEPS = {"bandit2", "tiger"}
+SLOW_SEPS = {"tiger"}
+FIXED_SEP = "bandit2"                     # Hızlı · Orta · Güçlü'nün ses ayırma modeli (ölçümlerde en hızlısı)
 BASES = ("hizli-kadin", "hizli-erkek", "hizli-oto", "detayli", "detayli-bandit2", "detayli-tiger")
 KEEP = {"_webview"}                       # calisma/ içinde silinmeyenler
 # Varyant: "<mod>[-<ayırma>][~<çeviri modeli>][~<ses modeli>]"  ör. "detayli-tiger~hymt7~vox";
@@ -115,8 +116,11 @@ def uses_gender(variant: str) -> bool:
 
 
 def sep_of(variant: str) -> str:
+    """ses ayırma modeli: Gelişmiş'te seçilen ("detayli" = UVR); Hızlı ve hazır modlar (Orta, Güçlü) BandIt v2"""
     base = split_variant(variant)[0]
-    return base.split("-", 1)[1] if base.startswith("detayli-") else "uvr"
+    if base.startswith("detayli-"):
+        return base.split("-", 1)[1]
+    return FIXED_SEP if base.startswith("hizli") or preset_of(variant) else "uvr"
 
 
 def mt_of(variant: str) -> str:
@@ -512,10 +516,32 @@ class Manager:
             if fixed_steps(variant):                   # hazır mod: adım sayısı sabit
                 self.job.vox_steps = fixed_steps(variant)
             self._apply(self.job, v, variant, rng)
+            if not self.job.buffering:
+                self._single_unit(v, variant)
             self.job.focus = focus
             self.job.error = None
             self.cv.notify_all()
             return self.job
+
+    def _single_unit(self, v: Video, variant: str) -> None:
+        """Buffering kapalı: aralığın bu modda bitmemiş kısmı TEK PARÇA işlensin. Önceki çalışmalardan (buffering açıkken
+        ya da başka bir modelle) kalan parça planı videoya bağlı olduğu için yeniden kullanılırsa iş parça parça
+        yürüyordu. Bitmemiş parçalar atılır, boşluk _plan_next'te tek parça olarak planlanır (bitmiş parçalar kalır)."""
+        ra, rb = self.job.range
+        with v.lock:
+            drop = [c for c in v.chunks if c["end"] > ra and c["start"] < rb and not chunk_done(v, c["i"], variant)]
+            if not drop:
+                return
+            v.chunks = [c for c in v.chunks if c not in drop]
+        cur = self.job.current
+        if cur and any(c["i"] == cur["chunk"] for c in drop):   # o anda işlenen parça atıldı: işi yeniden başlat
+            old = self.job
+            old.cancel = True
+            self.job = Job(v, variant, False)
+            self.job.seed, self.job.chunk_len, self.job.vox_steps = old.seed, old.chunk_len, old.vox_steps
+            self.job.timing, self.job.timing_video, self.job.range = old.timing, old.timing_video, old.range
+        for c in drop:
+            _rmtree_later(v.dir / f"c{c['i']:03d}")
 
     def stop(self, vid: str, variant: str) -> None:
         with self.cv:
@@ -888,9 +914,10 @@ class Manager:
             emj = load_json(d / ename)
             # çeviri ve dublaj dosyaları çeviri modeline göre ayrı olabilir: "tr<ayırma>[~<model>].json"
             trs = {g.name: (load_json(g, {}) or {}) for g in d.glob("tr*.json") if g.stem[2:].partition("~")[0] == sx}
+            # Gelişmiş / Orta / Güçlü: "dub_oto<ayırma>[~...]" · Hızlı: dub_kadin / dub_auto / dub_erkek (BandIt v2)
             dubs = [g for g in d.glob("dub_*.json")
                     if (g.stem.startswith("dub_oto") and g.stem[7:].partition("~")[0] == sx)
-                    or (not g.stem.startswith("dub_oto") and sx == "")]
+                    or (not g.stem.startswith("dub_oto") and sx == "_" + FIXED_SEP)]
             dubj = {g.name: load_json(g, {}) or {} for g in dubs}
             for j, dd in enumerate(dirs):
                 idx = [i for i, o in enumerate(own) if o == j]
@@ -951,6 +978,8 @@ class Manager:
             except _Cancelled:
                 pass
             except Exception as e:  # noqa: BLE001
+                if job.cancel or self.job is not job:   # iptal edilen işin artığı (parçası atılmış olabilir)
+                    continue
                 traceback.print_exc()
                 job.error = f"Parça {fmt_t(c['start'])}–{fmt_t(c['end'])}: {e}"
                 if job.current:

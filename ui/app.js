@@ -210,7 +210,8 @@ const variant = () => S.mode === "hizli" ? "hizli-" + S.gender
   : "detayli" + (S.sep && S.sep !== "uvr" ? "-" + S.sep : "") + (S.mt && S.mt !== MT_DEFAULT ? "~" + S.mt : "") +
     (TTS_IDS.includes(S.tts) ? "~" + S.tts : "");
 const parseV = (v) => { const [base, ...opts] = String(v || "").split("~"); return { base, det: base.startsWith("detayli"),
-  sep: base.startsWith("detayli-") ? base.split("-")[1] : "uvr", mt: opts.find((o) => MT_MODELS[o]) || MT_DEFAULT,
+  sep: base.startsWith("detayli-") ? base.split("-")[1] : base.startsWith("hizli") || opts.some((o) => PRESETS[o]) ? "bandit2" : "uvr",
+  mt: opts.find((o) => MT_MODELS[o]) || MT_DEFAULT,
   tts: opts.find((o) => TTS_IDS.includes(o)) || "std", preset: opts.find((o) => PRESETS[o]) || "" }; };
 /* varyantta gerçekten çalışan ses modeli (Hızlı'nın sesleri dahil) */
 const ttsOfV = (v) => { const p = parseV(v); return p.det ? p.tts : HIZLI_TTS[p.base.split("-")[1]] || "antalia"; };
@@ -722,10 +723,11 @@ for (const b of $$("#pSubs .ptab")) b.addEventListener("click", () => {
 
 /* ================= dublaj paneli ================= */
 const SEP_MODELS = {
-  uvr: { name: "UVR-MDX-NET Voc FT", note: "varsayılan · hızlı", slow: false },
-  bandit2: { name: "BandIt v2 · DnR Multi", note: "yavaş çalışır", slow: true },
+  uvr: { name: "UVR-MDX-NET Voc FT", note: "hızlı", slow: false },
+  bandit2: { name: "BandIt v2 · DnR Multi", note: "hızlı · Hızlı, Orta ve Güçlü modlar bunu kullanır", slow: false },
   tiger: { name: "TIGER-DnR", note: "yavaş çalışır", slow: true },
 };
+const FIXED_SEP = "bandit2";                           // Hızlı · Orta · Güçlü'nün ses ayırma modeli (sunucuda da aynı)
 if (!SEP_MODELS[S.sep]) S.sep = "uvr";
 /* buffering: her modda açık başlar (VoxCPM2'li modlar uzun sürer, izlerken hazırlanması rahat olur); her mod kendi ayarını tutar */
 S.bufMode = { hizli: true, orta: true, guclu: true, gelismis: true };
@@ -766,7 +768,7 @@ function modelRows() {
   const auto = S.mode === "hizli" && S.gender === "oto";
   const cur = ttsOfV(variant());
   const tts = pre ? "VoxCPM2" : TTS_NAME(cur) + (AHENK.has(cur) && !det ? ` · ${HIZLI_STEPS} adım` : "");
-  const sm = det ? SEP_MODELS[S.sep] : SEP_MODELS.uvr;
+  const sm = det ? SEP_MODELS[S.sep] : SEP_MODELS[FIXED_SEP];
   const mm = det ? MT_MODELS[S.mt] : MT_MODELS[MT_DEFAULT];
   const rows = [
     { k: det ? "sep" : "", st: "separate", stage: "Ses ayırma", model: sm.name, tag: sm.slow ? "yavaş çalışır" : "" },
@@ -886,7 +888,7 @@ function toRangeStart() {
 const isDone = () => S.av && S.status && S.status.complete;
 /* tahmini süre: Modeller menüsündeki ölçümler (1 dk video kaç sn) × dublajlanacak süre; ölçülmemiş modelde
    bu bilgisayarda gözlenen yaklaşık değerler kullanılır */
-const ETA_GUESS = { "sep:uvr": 12.5, "sep:bandit2": 62, "sep:tiger": 62, "asr:whisper-turbo": 6.5, "gender:vgc": 0.5,
+const ETA_GUESS = { "sep:uvr": 12.5, "sep:bandit2": 12, "sep:tiger": 32, "asr:whisper-turbo": 6.5, "gender:vgc": 0.5,
   "mt:milmmt4": 4.5, "mt:hymt7": 6.5, "tts:ema": 1.7, "tts:antalia": 1.7, "tts:ema+antalia": 1.8,
   "tts:vox:4": 42, "tts:vox:5": 50, "tts:vox:10": 72, "tts:vox:20": 115, "tts:vox:30": 160, "emo:jh": 1.5,
   "tts:ahenkcep:4": 2, "tts:ahenkcep:8": 2, "tts:ahenkcep:16": 2.2, "tts:ahenkcep:32": 2.6,
