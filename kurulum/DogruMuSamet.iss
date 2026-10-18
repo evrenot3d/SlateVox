@@ -63,6 +63,7 @@ Source: "..\guncelle.py";       DestDir: "{app}"; Flags: ignoreversion
 Source: "..\sepmodels.py";      DestDir: "{app}"; Flags: ignoreversion
 Source: "..\polarformer.py";    DestDir: "{app}"; Flags: ignoreversion
 Source: "..\vox_worker.py";     DestDir: "{app}"; Flags: ignoreversion
+Source: "..\telaffuz.py";       DestDir: "{app}"; Flags: ignoreversion
 Source: "..\modelleri_indir.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\torch_duzelt.py";   DestDir: "{app}"; Flags: ignoreversion
 Source: "..\requirements.txt";  DestDir: "{app}"; Flags: ignoreversion

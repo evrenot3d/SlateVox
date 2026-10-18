@@ -55,6 +55,9 @@ TTS_VOICE = {"ema": "kadin", "antalia": "erkek"}   # tek sesli hazır modeller (
 STEP_DEFAULT = {"vox": E.VOX_STEPS, **{t: E.AHENK_STEPS for t in AHENK_TTS}}
 # Hızlı: Kadın = Ahenk Cep, Otomatik = Ahenk Cep (kadın) + Antalia (erkek), Erkek = Antalia; Ahenk Cep 16 adım sabit
 HIZLI_TTS = {"hizli-kadin": "ahenkcep", "hizli-oto": "cepant", "hizli-erkek": "antalia"}
+# Çeviride kalan İngilizce adlar Türkçe okunuşla yazılır (telaffuz.py): Hızlı · Orta · Güçlü'de ikisi her zaman açık;
+# Gelişmiş'te VoxCPM2 dışındaki seslerde iki ayrı anahtar (varyant ekleri ~cmu, ~g2p)
+PRON_FLAGS = {"cmu": "CMU sözlüğü", "g2p": "yapay zekâ tahmini"}
 # Hazır modlar (ayarları kilitli): UVR + MiLMMT + VoxCPM2, sabit adım sayısıyla. Varyant: "detayli~vox~orta"
 PRESETS = {"orta": 10, "guclu": 20}
 
@@ -99,9 +102,11 @@ def fixed_steps(variant: str):
 def valid_variant(variant: str) -> bool:
     base, mt, tts, opts = parse_variant(variant)
     pre = [o for o in opts if o in PRESETS]
+    pron = [o for o in opts if o in PRON_FLAGS]
     return (base in BASES and len(opts) == len(set(opts))
-            and all(o in E.MT_MODELS or o in TTS_KEYS or o in PRESETS for o in opts)
+            and all(o in E.MT_MODELS or o in TTS_KEYS or o in PRESETS or o in PRON_FLAGS for o in opts)
             and sum(o in TTS_KEYS for o in opts) <= 1
+            and (not pron or (base.startswith("detayli") and tts != "vox" and not pre))
             and (base.startswith("detayli") or (mt == E.MT_DEFAULT and tts == "std"))
             and (not pre or (len(pre) == 1 and base == "detayli" and tts == "vox" and mt == E.MT_DEFAULT)))
 
@@ -150,11 +155,25 @@ def fname_mt(variant: str, base: str) -> str:
     return f"{stem}{sfx(variant)}{mtsfx(variant)}.{ext}"
 
 
+def pron_flags(variant: str) -> list:
+    """varyantta yazılı telaffuz seçenekleri (Gelişmiş'in anahtarları; sıra sabit): ["cmu"], ["g2p"], ikisi ya da []"""
+    opts = variant.split("~")[1:]
+    return [f for f in PRON_FLAGS if f in opts]
+
+
+def pron_of(variant: str) -> list:
+    """dublajda çalışan telaffuz seçenekleri: Hızlı · Orta · Güçlü'de ikisi her zaman açık, Gelişmiş'te anahtarlar"""
+    if variant.startswith("hizli") or preset_of(variant):
+        return list(PRON_FLAGS)
+    return pron_flags(variant)
+
+
 def fname_dub(variant: str, base: str) -> str:
-    """ayırmaya, çeviri modeline ve ses modeline bağlı dosya (dublaj)"""
+    """ayırmaya, çeviri modeline, ses modeline ve telaffuz seçeneklerine bağlı dosya (dublaj)"""
     stem, ext = base.rsplit(".", 1)
     t, pre = tts_of(variant), preset_of(variant)
-    return f"{stem}{sfx(variant)}{mtsfx(variant)}{'' if t == 'std' else '~' + t}{'~' + pre if pre else ''}.{ext}"
+    pr = "".join("~" + f for f in pron_flags(variant))
+    return f"{stem}{sfx(variant)}{mtsfx(variant)}{'' if t == 'std' else '~' + t}{'~' + pre if pre else ''}{pr}.{ext}"
 
 
 def stages_for(variant: str) -> list:
@@ -672,13 +691,15 @@ class Manager:
         raw = dub_file(variant)
         dj = load_json(d / (raw[:-4] + ".json"), {}) or {}
         voices, timings, emos = dj.get("voices", []), dj.get("timings", []), dj.get("emotions", [])
+        prons = dj.get("pron", [])
         segs = []
         for i, s in enumerate(asr.get("segments", [])):
             t = timings[i] if i < len(timings) else None
             segs.append({"start": round(a + s["start"], 3), "end": round(a + s["end"], 3), "en": s["en"],
                          "tr": tr[i] if i < len(tr) else "", "g": voices[i] if i < len(voices) else None,
                          "ds": round(a + t[0], 3) if t else None, "de": round(a + t[1], 3) if t else None,
-                         **({"emo": emos[i]} if i < len(emos) else {})})
+                         **({"emo": emos[i]} if i < len(emos) else {}),
+                         **({"pron": prons[i]} if i < len(prons) and prons[i] else {})})
         base = f"/media/{vid}/c{k:03d}/"
         audio = {"dub": f"{base}{raw}?v={int((d / raw).stat().st_mtime)}", "bg": f"{base}{fname(variant, 'inst.wav')}",
                  "en": f"{base}{fname(variant, 'vocals.wav')}"}
@@ -937,10 +958,12 @@ class Manager:
                                             "scores": [sc[i] for i in idx if i < len(sc)]})
                 for name, dj in dubj.items():
                     vo, tm, em = dj.get("voices", []), dj.get("timings", []), dj.get("emotions")
+                    pr = dj.get("pron")
                     save_json(dd / name, {"voices": [vo[i] for i in idx if i < len(vo)],
                                           "timings": [([round(tm[i][0] - off, 3), round(tm[i][1] - off, 3)]
                                                        if i < len(tm) and tm[i] else None) for i in idx],
-                                          **({"emotions": [em[i] for i in idx if i < len(em)]} if em else {})})
+                                          **({"emotions": [em[i] for i in idx if i < len(em)]} if em else {}),
+                                          **({"pron": [pr[i] for i in idx if i < len(pr)]} if pr else {})})
         with v.lock:
             alive = any(x["i"] == k for x in v.chunks)      # bu arada aralık değiştiyse (parçalar atıldıysa) ekleme
             if alive:
@@ -1145,6 +1168,16 @@ class Manager:
             target = E.active_rms(x.mean(axis=1), sr) or 0.08
             items = [{"start": s["start"], "end": s["end"], "tr": tr[i] if i < len(tr) else "", "en": s.get("en", "")}
                      for i, s in enumerate(segs)]
+            pron = None
+            flags = pron_of(variant)
+            if flags:                                  # İngilizce adlar Türkçe okunuşla (yalnız sese giden metin)
+                on("indiriliyor", 0, "Telaffuz sözlüğü hazırlanıyor")
+                import telaffuz
+                pron = []
+                for it in items:
+                    it["tr"], ch = telaffuz.transform(it["tr"], it["en"], E.MODELS, "cmu" in flags, "g2p" in flags)
+                    pron.append(ch)
+                on("calisiyor", 0, f"{sum(map(len, pron))} ad Türkçe okunuşla")
             t = dub_tts(variant)
             if t == "vox":                             # her cümle kendi İngilizce sesinden kopyalanır (duygu dahil)
                 track, timings = self.engine.dub_vox(items, voc_f, voices, dur, target, on, seed=job.seed, work=d,
@@ -1158,7 +1191,8 @@ class Manager:
                 who = [TTS_VOICE[t]] * len(voices) if t in TTS_VOICE else voices
                 track, timings = self.engine.dub(items, who, dur, target, on, seed=job.seed)
             E.write_wav(d / raw, track, E.DUB_SR)
-            save_json(rawj, {"voices": voices, "timings": timings, **({"emotions": emotions} if emotions else {})})
+            save_json(rawj, {"voices": voices, "timings": timings, **({"emotions": emotions} if emotions else {}),
+                             **({"pron": pron} if pron else {})})
             done("dub", detail=f"{time.time() - t0:.0f} sn")
 
         if not job.buffering and dur > 150.0:          # tek parça işlendi → oynatma için dilimle

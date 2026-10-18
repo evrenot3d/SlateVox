@@ -24,6 +24,10 @@ Türkçe seslendirir. Arka plandaki müzik ve efektler korunur; dublaj videoyla 
   olarak (EMA Lightning, Ahenk Cep veya Ahenk + Antalia-2 Mini) seçilebilir
 - **Duygu:** Ahenk modelleri kullanılırken her cümlenin duygusu (kızgın, neşeli, üzgün, sakin, şaşkın, şefkatli,
   gülerek) İngilizce metinden ve orijinal sesten bulunup modele bildirilir
+- **İngilizce adların okunuşu:** çeviride kalan adlar Türkçe okunuşla seslendirilir (Michael → Maykıl,
+  Brooklyn'de → Bruklın'da); CMU telaffuz sözlüğü + yapay zekâ tahmini. Hızlı, Orta ve Güçlü'de her zaman açık,
+  Gelişmiş'te iki ayrı anahtar
+- **Ses ayırma:** standart model BandIt v2 (Gelişmiş'te UVR ve TIGER-DnR de seçilebilir)
 - **Parça parça işleme:** ilk bölüm hazır olur olmaz izlemeye başlarsınız, kalanı arkada hazırlanır
 - **YouTube bağlantısı:** video indirilmeden izlenir, dublaj için yalnız ses indirilir
 - Türkçe / İngilizce altyazı, konuşmacı noktaları, ses karıştırıcı, dışa aktarma (MP4 / WAV)
@@ -96,6 +100,7 @@ Her birinin kendi lisansı geçerlidir.
 | Türkçe çeviri | [MiLMMT-46 4B](https://huggingface.co/mradermacher/MiLMMT-46-4B-v1.0-GGUF) · [Hy-MT2 7B](https://huggingface.co/tencent/Hy-MT2-7B-GGUF) · [llama.cpp](https://github.com/ggml-org/llama.cpp) |
 | Türkçe ses | [EMA Lightning](https://pypi.org/project/ema-lightning/) · [Antalia-2 Mini](https://pypi.org/project/antalia-mini/) · [VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) · [Ahenk](https://huggingface.co/ozgurguler/ahenk-tts-tr) · [Ahenk Cep](https://huggingface.co/ozgurguler/ahenk-cep-tr) (Özgür Güler, CC BY 4.0) |
 | Türkçe metin düzeltme | [trnorm](https://github.com/ozguradmin/ahenk-turkish-tts) (Apache-2.0; `trnorm/` klasörüne kopyalandı) |
+| İngilizce ad okunuşu | [CMU Pronouncing Dictionary](https://github.com/cmusphinx/cmudict) · [g2p_en](https://github.com/Kyubyong/g2p) (Apache-2.0) · yöntem ve kurallar: [sewox/turkish-neural-tts](https://github.com/sewox/turkish-neural-tts) (Apache-2.0) |
 | Duygu algılama | [Emotion English DistilRoBERTa-base](https://huggingface.co/j-hartmann/emotion-english-distilroberta-base) (Jochen Hartmann, 2022) · [ONNX kopyası](https://huggingface.co/onnx-community/emotion-english-distilroberta-base-ONNX) |
 | Diğer | [PyTorch](https://pytorch.org) · [pywebview](https://github.com/r0x0r/pywebview) · [yt-dlp](https://github.com/yt-dlp/yt-dlp) · [Deno](https://deno.com) |
 

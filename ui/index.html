@@ -176,6 +176,15 @@
             <div class="steps" id="voxSteps"></div>
             <div class="voxlock" id="voxLock" hidden></div>
           </div>
+          <div class="field" id="pronField" hidden>
+            <label class="hastip">İngilizce adların okunuşu <i class="ti">i</i><span class="tipbox">Çeviride İngilizce kalan adlar
+              (Michael, Brooklyn, Watson…) Türkçe okunuşla yazılıp seslendirilir: Michael → Maykıl. Yalnız cümlenin İngilizce
+              aslında da geçen ve yazılışı İngilizceye özgü kelimeler değişir; Paris, Tesla, Anna ve Türkçe kelimeler olduğu
+              gibi kalır. Altyazı değişmez. CMU: 126 bin kelimelik İngilizce telaffuz sözlüğü. Yapay zekâ: sözlükte olmayan
+              kelimelerin telaffuzunu tahmin eder (ikisi açıksa önce sözlüğe bakılır).</span></label>
+            <label class="tgrow"><span class="tl">CMU telaffuz sözlüğü</span><span></span><input type="checkbox" id="pronCmu" class="tg"></label>
+            <label class="tgrow"><span class="tl">Yapay zekâ telaffuz tahmini</span><span></span><input type="checkbox" id="pronG2p" class="tg"></label>
+          </div>
           <div class="field" id="rangeRow" hidden>
             <label>Dublajlanacak aralık</label>
             <div class="rangebox"><span id="rangeTxt"></span><button type="button" class="btn small" id="rangeAll" hidden>Tümü</button></div>
