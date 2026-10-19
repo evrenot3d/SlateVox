@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<title>"Doğru mu Samet?"</title>
+<title>SlateVox</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -36,7 +36,7 @@
       </div>
     </div>
   </nav>
-  <div class="apptitle">"Doğru mu Samet?"</div>
+  <div class="apptitle">SlateVox</div>
   <div class="titleright"><span class="chip" id="gpuChip">—</span></div>
 </header>
 
@@ -44,7 +44,7 @@
   <section class="center">
     <div class="canvas" id="canvas">
       <div class="welcome" id="welcome">
-        <div class="wtitle"><div class="wname">"Doğru mu Samet?"<sup class="ver" id="verTag"></sup></div><span>İngilizce → Türkçe dublaj</span></div>
+        <div class="wtitle"><img class="wlogo" src="kurulum_logo.png" alt="SlateVox logosu"><div class="wname">SlateVox<sup class="ver" id="verTag"></sup></div><span>İngilizce → Türkçe dublaj</span></div>
         <p>Bir video açın ya da pencereye sürükleyip bırakın.</p>
         <div class="wbtns">
           <button class="btn primary" type="button" id="wOpen">Video Aç… <kbd>Ctrl O</kbd></button>
@@ -93,25 +93,23 @@
       </div>
       <div class="mixer" id="mixer" data-off="1">
         <div class="ch" data-ch="dub">
-          <button class="chbtn" type="button" title="Türkçe dublaj (sessize al)">
-            <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>Türkçe
-          </button>
-          <input type="range" min="0" max="150" value="100">
-          <output>100%</output>
+          <div class="langsw" id="langSw" title="Konuşma sesi: Türkçe dublaj ya da İngilizce orijinal">
+            <button type="button" data-l="dub" class="on">Türkçe</button><button type="button" data-l="en">İngilizce</button>
+          </div>
+          <input type="range" min="0" max="150" value="70">
+          <output>70%</output>
         </div>
         <div class="ch" data-ch="bg">
           <button class="chbtn" type="button" title="Arka plan sesi (sessize al)">
             <svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>Arka plan
           </button>
-          <input type="range" min="0" max="150" value="100">
-          <output>100%</output>
+          <input type="range" min="0" max="150" value="150">
+          <output>150%</output>
         </div>
-        <div class="ch" data-ch="en">
-          <button class="chbtn" type="button" title="İngilizce orijinal konuşma (sessize al)">
-            <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>İngilizce
-          </button>
-          <input type="range" min="0" max="150" value="0">
-          <output>0%</output>
+        <div class="rangebar" id="rangeRow" hidden title="Dublajlanacak aralık (video çubuğundaki başlangıç / bitiş noktaları)">
+          <svg viewBox="0 0 24 24"><path d="M5 4v16M19 4v16M5 12h14"/></svg>
+          <span id="rangeTxt"></span>
+          <button type="button" class="btn small" id="rangeAll" title="Aralığı kaldır, tüm videoyu dublajla">Tüm video</button>
         </div>
         <div class="ccgrp">
           <button class="ccbtn on" id="ccBtn" type="button" title="Altyazı aç / kapat (sağ tık: altyazı ayarları)">CC</button>
@@ -139,6 +137,7 @@
       <button type="button" class="rbtn on" data-p="pDub" title="Dublaj"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button>
       <button type="button" class="rbtn on" data-p="pJob" title="İşlem"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg></button>
       <button type="button" class="rbtn on" data-p="pSubs" title="Altyazı"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 13h4M13 13h4M7 16h10"/></svg></button>
+      <div class="rhist" id="histRail" hidden></div>
     </div>
     <div class="panels">
       <!-- Dublaj -->
@@ -185,11 +184,6 @@
             <label class="tgrow"><span class="tl">CMU telaffuz sözlüğü</span><span></span><input type="checkbox" id="pronCmu" class="tg"></label>
             <label class="tgrow"><span class="tl">Yapay zekâ telaffuz tahmini</span><span></span><input type="checkbox" id="pronG2p" class="tg"></label>
           </div>
-          <div class="field" id="rangeRow" hidden>
-            <label>Dublajlanacak aralık</label>
-            <div class="rangebox"><span id="rangeTxt"></span><button type="button" class="btn small" id="rangeAll" hidden>Tümü</button></div>
-            <div class="bnote">Oynatma çubuğundaki başlangıç / bitiş tutamaçlarını sürükleyerek seçin.</div>
-          </div>
           <div class="field" id="bufField">
             <label class="tgrow hastip"><span class="tl">Buffering <i class="ti">i</i></span><input type="checkbox" id="bufTg" class="tg"><span class="tipbox" id="bufNote"></span></label>
             <div class="lenrow" id="lenRow" title="Her parçanın süresi. Parçalar cümle ortasından bölünmez.">
@@ -206,6 +200,8 @@
             <button class="btn primary" id="goBtn" type="button" disabled>Dublajı Başlat</button>
             <span class="eta" id="goEta" hidden></span>
           </div>
+          <button class="btn" id="goExpBtn" type="button" disabled
+                  title="Dublajlar, bitince dublajlı videoyu seçtiğiniz yere MP4 olarak kaydeder. Video uygulamada da oynatılabilir ama kendiliğinden başlamaz.">Dublajla ve Dışa Aktar</button>
           <div class="hint" id="goHint">Önce bir video açın</div>
         </div>
       </div>

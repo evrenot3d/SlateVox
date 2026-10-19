@@ -65,7 +65,7 @@ def driver_major() -> int:
 
 
 def _get(url: str) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": "dogru-mu-samet"})
+    req = urllib.request.Request(url, headers={"User-Agent": "slatevox"})
     with urllib.request.urlopen(req, timeout=600) as r:
         return r.read()
 

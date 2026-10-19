@@ -3,7 +3,7 @@ chcp 65001 >nul
 cd /d "%~dp0"
 if not exist ".venv\Scripts\pythonw.exe" (
   rem Bilesenler henuz kurulmamis: kurulum penceresi acilir, bitince program kendiliginden baslar.
-  start "Dogru mu Samet - Kurulum" "%~dp0KUR.bat"
+  start "SlateVox - Kurulum" "%~dp0KUR.bat"
   exit /b 0
 )
 set PYTHONUTF8=1

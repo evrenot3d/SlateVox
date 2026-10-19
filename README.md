@@ -1,18 +1,18 @@
-<p align="center"><img src="ui/kurulum_logo.png" width="260" alt="Doğru mu Samet? logosu"></p>
+<p align="center"><img src="ui/kurulum_logo.png" width="260" alt="SlateVox logosu"></p>
 
-<h1 align="center">"Doğru mu Samet?"</h1>
+<h1 align="center">SlateVox</h1>
 <p align="center"><b>İngilizce videoları Türkçe dublajla izleyin.</b><br>
 Bütün yapay zekâ modelleri kendi bilgisayarınızda çalışır; videolarınız hiçbir sunucuya gönderilmez.</p>
 
 <p align="center">
-  <a href="https://github.com/evrenot3d/dogru-mu-samet/releases/latest"><b>⬇ Son sürümü indir</b></a>
+  <a href="https://github.com/evrenot3d/SlateVox/releases/latest"><b>⬇ Son sürümü indir</b></a>
 </p>
 
 ---
 
 ## Nedir?
 
-"Doğru mu Samet?", İngilizce bir videoyu açtığınızda konuşmaları ayırır, yazıya döker, Türkçeye çevirir ve
+SlateVox, İngilizce bir videoyu açtığınızda konuşmaları ayırır, yazıya döker, Türkçeye çevirir ve
 Türkçe seslendirir. Arka plandaki müzik ve efektler korunur; dublaj videoyla eş zamanlı çalar.
 
 - **Hızlı mod:** kadın (Ahenk Cep, duygulu), erkek (Antalia-2 Mini) ya da otomatik (kadınları Ahenk Cep, erkekleri
@@ -28,6 +28,23 @@ Türkçe seslendirir. Arka plandaki müzik ve efektler korunur; dublaj videoyla 
   Brooklyn'de → Bruklın'da); CMU telaffuz sözlüğü + yapay zekâ tahmini. Hızlı, Orta ve Güçlü'de her zaman açık,
   Gelişmiş'te iki ayrı anahtar
 - **Ses ayırma:** standart model BandIt v2 (Gelişmiş'te UVR ve TIGER-DnR de seçilebilir)
+- **Çeviri iyileştirme (Gelişmiş, deneysel):** çeviriden sonra bir Türkçe dil modeli (Trendyol-LLM-8B-T1 ya da
+  Cosmos Turkish-Gemma-9B-T1) cümleleri İngilizce aslına ve bağlama bakarak düzeltir; ilk çeviri saklanır
+- **Türkçe aksan modu (Gelişmiş · VoxCPM2, deneysel):** İngilizce "devam ettirme" yerine yalnız ses rengi örneği +
+  algılanan duygu talimatı; kelime sonlarındaki hafif İngilizce aksanı azaltmak için
+- **Render geçmişi (Gelişmiş):** her bitmiş dublaj "Ses 1, Ses 2 …" olarak orta şeritte saklanır; tıklayıp
+  karşılaştırabilirsiniz (uygulama kapanınca silinir). Gelişmiş ayarları bir sonraki açılışta hatırlanır
+- **Ses işleme · stüdyo miksi (Gelişmiş, deneysel):** yapay zekâ değil, dublaj stüdyolarının klasik son işlemesi;
+  üç ayrı anahtar (varsayılan açık): ses rengini orijinal konuşmaya eşleme + hafif ortam yankısı · de-esser, EQ ve
+  kompresör · loudness standardı (orijinalle eşleme, dışa aktarmada −16 LUFS). İşlenmemiş dublaj ayrı saklanır,
+  anahtar değişince yalnız bu birkaç saniyelik işlem yeniden yapılır
+- **Orta ve Güçlü:** Türkçe aksan modu ve ses işleme (stüdyo miksi) her zaman açık; Güçlü'de ayrıca Cosmos
+  çeviri iyileştirmesi
+- **Dublajla ve Dışa Aktar:** dublaj bitince dublajlı video seçilen yere MP4 olarak kaydedilir (kendiliğinden oynamaz)
+- **Ayar değişince sıfırdan başlamaz:** ses ayırma, İngilizce metin, çeviri gibi yeni ayarla ortak adımlar yeniden
+  yapılmaz, yalnız değişen adımlar çalışır (dublaj sürerken değiştirilse bile o an çalışan ortak adım yarıda kesilmez)
+- **Cümle düzenleme:** altyazı listesinde bir cümlenin üzerindeki kalem düğmesiyle Türkçe metin, okunuş, duygu,
+  kadın / erkek ses ve konuşma hızı değiştirilip yalnız o cümle yeniden seslendirilir
 - **Parça parça işleme:** ilk bölüm hazır olur olmaz izlemeye başlarsınız, kalanı arkada hazırlanır
 - **YouTube bağlantısı:** video indirilmeden izlenir, dublaj için yalnız ses indirilir
 - Türkçe / İngilizce altyazı, konuşmacı noktaları, ses karıştırıcı, dışa aktarma (MP4 / WAV)
@@ -43,8 +60,8 @@ Türkçe seslendirir. Arka plandaki müzik ve efektler korunur; dublaj videoyla 
 
 ## Kurulum
 
-1. [Releases](https://github.com/evrenot3d/dogru-mu-samet/releases/latest) sayfasından
-   **`DogruMuSamet-Kurulum-x.y.z.exe`** dosyasını indirip çalıştırın. Yönetici izni gerekmez.
+1. [Releases](https://github.com/evrenot3d/SlateVox/releases/latest) sayfasından
+   **`SlateVox-Kurulum-x.y.z.exe`** dosyasını indirip çalıştırın. Yönetici izni gerekmez.
 2. Program ilk açıldığında kendi ekranında **"Gerekli bileşenler"** sayfası çıkar.
    **Bileşenleri İndir** deyin; yapay zekâ altyapısı (yaklaşık 5 GB) indirilir.
    Yarıda kalırsa kaldığı yerden devam eder.
@@ -98,6 +115,7 @@ Her birinin kendi lisansı geçerlidir.
 | İngilizce metin | [Whisper Large V3 Turbo](https://huggingface.co/openai/whisper-large-v3-turbo) · [faster-whisper](https://github.com/SYSTRAN/faster-whisper) |
 | Kadın / erkek ayırma | [voice-gender-classifier](https://huggingface.co/Alice-Sabrina-Ivy/voice-gender-classifier-onnx-q8-v2) · [WeSpeaker ResNet34-LM](https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM) |
 | Türkçe çeviri | [MiLMMT-46 4B](https://huggingface.co/mradermacher/MiLMMT-46-4B-v1.0-GGUF) · [Hy-MT2 7B](https://huggingface.co/tencent/Hy-MT2-7B-GGUF) · [llama.cpp](https://github.com/ggml-org/llama.cpp) |
+| Çeviri iyileştirme | [Trendyol-LLM-8B-T1](https://huggingface.co/Trendyol/Trendyol-LLM-8B-T1) (Apache-2.0) · [Cosmos Turkish-Gemma-9B-T1](https://huggingface.co/ytu-ce-cosmos/Turkish-Gemma-9b-T1) (YTÜ Cosmos, Gemma lisansı) |
 | Türkçe ses | [EMA Lightning](https://pypi.org/project/ema-lightning/) · [Antalia-2 Mini](https://pypi.org/project/antalia-mini/) · [VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) · [Ahenk](https://huggingface.co/ozgurguler/ahenk-tts-tr) · [Ahenk Cep](https://huggingface.co/ozgurguler/ahenk-cep-tr) (Özgür Güler, CC BY 4.0) |
 | Türkçe metin düzeltme | [trnorm](https://github.com/ozguradmin/ahenk-turkish-tts) (Apache-2.0; `trnorm/` klasörüne kopyalandı) |
 | İngilizce ad okunuşu | [CMU Pronouncing Dictionary](https://github.com/cmusphinx/cmudict) · [g2p_en](https://github.com/Kyubyong/g2p) (Apache-2.0) · yöntem ve kurallar: [sewox/turkish-neural-tts](https://github.com/sewox/turkish-neural-tts) (Apache-2.0) |

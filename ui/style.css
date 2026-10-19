@@ -155,6 +155,25 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .sub .x{color:#bdbdbd;line-height:1.45;user-select:text}
 .sub .g{font-size:11px;margin-left:5px}
 .sub .g.kadin{color:var(--fem)}.sub .g.erkek{color:var(--male)}
+.sub{position:relative;padding-right:32px!important}
+.sub .sedit{position:absolute;right:5px;top:5px;width:24px;height:24px;border-radius:5px;display:grid;place-items:center;opacity:0;background:var(--bg-input);border:1px solid var(--line);color:var(--dim);transition:opacity .12s}
+.sub:hover .sedit,.sub .sedit:focus-visible{opacity:1}
+.sub .sedit:hover{color:var(--text);border-color:#5c5c5c}
+.sub .sedit svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.sub.edited .t::after{content:"✎";margin-left:5px;font-size:10px;color:var(--dim)}
+.edform{display:flex;flex-direction:column;gap:12px}
+.edrow{display:flex;flex-direction:column;gap:5px}
+.edl{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px}
+.edl em,.edchk em{font-style:normal;text-transform:none;letter-spacing:0;color:var(--dim)}
+.eden{color:var(--muted);font-size:13px;line-height:1.45}
+.edform textarea,.edform input[type=text],.edform select{width:100%;box-sizing:border-box;background:var(--bg-input);border:1px solid var(--line);border-radius:var(--r);color:var(--text);font:inherit;font-size:13.5px;padding:7px 9px}
+.edform textarea{resize:vertical;line-height:1.45}
+.edform textarea:focus,.edform input[type=text]:focus,.edform select:focus{outline:none;border-color:var(--accent)}
+.edform small{font-size:11px;color:var(--dim);line-height:1.4}
+.edgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.edchk{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--text)}
+.edfoot{display:flex;align-items:center;gap:8px;margin-top:4px}
+.edfoot #edMsg{flex:1;font-size:11.5px}
 .sub .emo{display:inline-block;margin-left:7px;padding:0 6px;border-radius:8px;font-size:10.5px;line-height:16px;vertical-align:1px;color:var(--dim);border:1px solid var(--line)}
 .sub.on{background:var(--accent-soft);border-left-color:var(--accent)}
 .sub.on .x{color:#fff}
@@ -428,3 +447,63 @@ input[type=color]:disabled{opacity:.35;cursor:default}
 .hastip:hover .tipbox{display:block}
 .tgrow .tl{color:var(--text);font-size:12.5px;flex:none}
 .tgrow .tipbox{flex:none}
+
+/* Türkçe aksan modu anahtarı: Türkçe ses satırının altında, girintili */
+.mrow.tgl.sub{border-top:1px dashed #333;padding-left:18px}
+.mrow.tgl.sub .ms{font-size:11.5px;color:var(--text)}
+.mrow.tgl.sub .mm em{font-style:normal;font-size:11px;color:var(--dim)}
+/* video altındaki dublajlanacak aralık bilgisi (çubuklar sürüklenince) */
+.rangebar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);padding:2px 2px 0}
+.rangebar svg{width:14px;height:14px;fill:none;stroke:var(--accent);stroke-width:2;flex:none}
+.rangebar .rl{color:var(--text)}
+.rangebar #rangeTxt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rangebar #rangeTxt b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.rangebar #rangeTxt em{font-style:normal;color:var(--warn)}
+
+/* render geçmişi: orta şerit (Gelişmiş) */
+.rhist{display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:10px;padding-top:8px;border-top:1px solid var(--border);width:100%}
+.rhist .rh-t{font-size:9px;letter-spacing:.6px;color:var(--dim);cursor:help}
+.rhist .rh{width:28px;height:24px;border-radius:5px;font-size:11.5px;font-weight:600;color:var(--dim);background:var(--bg-input);border:1px solid var(--line);font-variant-numeric:tabular-nums}
+.rhist .rh:hover{color:var(--text);border-color:#5c5c5c}
+.rhist .rh.on{color:#fff;background:var(--accent-soft);border-color:var(--accent)}
+.rhist .rh.live{display:grid;place-items:center;margin-top:2px}
+.rhist .rh.live svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* Dublaj paneli ekrana sığmazsa kendi içinde fare tekerleğiyle kayar; altyazı paneline en az 200 px kalır */
+#pDub{flex:0 1 auto}
+#pDub .pbody{overflow-y:auto;min-height:0;overscroll-behavior:contain;scroll-behavior:smooth}
+#pDub .pbody::-webkit-scrollbar{width:9px}
+#pDub .pbody::-webkit-scrollbar-thumb{background:#4e4e4e;border-radius:5px;border:2px solid var(--bg-panel)}
+#pSubs:not(.folded){min-height:200px}
+.mrow.tgl.sub[title]:not([title=""]) .mm em{cursor:help}
+/* alt anahtar satırları: ad üstte, kısa not altında, anahtar sağda (dar pencerede üst üste binmez) */
+.mrow.tgl.sub{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"ms tg" "mm tg";row-gap:1px}
+.mrow.tgl.sub .ms{grid-area:ms}
+.mrow.tgl.sub .mm{grid-area:mm}
+.mrow.tgl.sub .mm em{margin-left:0}
+.mrow.tgl.sub .tg{grid-area:tg}
+
+/* Dublaj paneli açıkken Sesler ve Türkçe / İngilizce altyazı panelleri gizlenir; panel bütün yüksekliği kullanır */
+.panels:has(#pDub:not(.folded)) #pVoices,.panels:has(#pDub:not(.folded)) #pSubs{display:none}
+.panels:has(#pDub:not(.folded)) #pDub{flex:1 1 auto}
+/* konuşma sesi anahtarı (Türkçe dublaj / İngilizce orijinal) */
+.langsw{display:flex;flex:none;background:var(--bg-input);border:1px solid var(--line);border-radius:6px;padding:2px;gap:2px}
+.langsw button{padding:3px 8px;border-radius:4px;font-size:12px;color:var(--muted);white-space:nowrap}
+.langsw button.on{background:var(--accent);color:#fff}
+.langsw button:not(.on):hover{color:var(--text);background:rgba(255,255,255,.06)}
+/* dublajlanacak aralık: mikserde arka plan sesinin sağında */
+.mixer .rangebar{flex:0 1 auto;min-width:0;padding:0;gap:6px}
+.mixer .rangebar #rangeTxt{flex:0 1 auto}
+#goExpBtn{width:100%;margin-top:-4px}
+.mixer .rangebar #rangeTxt{flex:none;overflow:visible}
+.mixer .rangebar #rangeAll{white-space:nowrap;padding:3px 8px}
+.mixer .ch[data-ch="dub"] input[type=range]{flex-basis:110px;width:110px}
+/* açılış ekranı: adın üstünde logo, 3 saniyede bir sevimli bir titreme (güncelleme kartındakiyle aynı hareket) */
+.wtitle{align-items:center}
+.wtitle .wlogo{width:120px;height:auto;margin:0 auto 6px;image-rendering:pixelated;animation:ushake 3s ease-in-out infinite;transform-origin:50% 60%;user-select:none;-webkit-user-drag:none}
+@media (max-height:700px){.wtitle .wlogo{width:84px}}
+
+/* adım sayısı modeller listesinin içinde (Türkçe ses satırının altında) */
+#modelList #voxField{padding:8px 10px 10px;border-top:1px solid #333;background:rgba(255,255,255,.015)}
+#modelList #voxField>label{font-size:11.5px;color:var(--dim);text-transform:none;letter-spacing:0}
+#modelList .mopts .mrow.tgl.sub{background:transparent;border-top:1px dashed #3a3a3a;padding-left:10px}
+#modelList .mopts .mrow.tgl.sub:first-child{border-top:0}

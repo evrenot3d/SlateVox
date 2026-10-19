@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title Dogru mu Samet - Kurulum dosyasi olusturuluyor
+title SlateVox - Kurulum dosyasi olusturuluyor
 cd /d "%~dp0"
 
 rem Surum numarasi engine.py icindeki VERSION satirindan alinir
@@ -50,7 +50,7 @@ if not defined ISCC (
 )
 
 rem ---- 3) Kurulum dosyasi
-"%ISCC%" /DAppVer=%VER% DogruMuSamet.iss
+"%ISCC%" /DAppVer=%VER% SlateVox.iss
 if errorlevel 1 (
   echo.
   echo HATA: kurulum dosyasi olusturulamadi.
@@ -58,7 +58,7 @@ if errorlevel 1 (
   exit /b 1
 )
 echo.
-echo Hazir: %~dp0cikti\DogruMuSamet-Kurulum-%VER%.exe
+echo Hazir: %~dp0cikti\SlateVox-Kurulum-%VER%.exe
 explorer "%~dp0cikti"
 pause
 exit /b 0

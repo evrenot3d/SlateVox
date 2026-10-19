@@ -1,4 +1,4 @@
-﻿; "Doğru mu Samet?" kurulum betiği (Inno Setup 6)
+﻿; SlateVox kurulum betiği (Inno Setup 6)
 ; Oluşturmak için: kurulum\EXE_OLUSTUR.bat
 ;
 ; Antivirüs dostu olması için bilerek sade tutuldu:
@@ -14,30 +14,30 @@
 
 [Setup]
 AppId={{8F4C2A1E-5B7D-4E9A-9C3F-2D6B1A0E7F45}
-AppName=Doğru mu Samet?
+AppName=SlateVox
 AppVersion={#AppVer}
-AppVerName=Doğru mu Samet? {#AppVer}
+AppVerName=SlateVox {#AppVer}
 AppPublisher=Evren TUĞ
 AppPublisherURL=https://www.instagram.com/evrenot3d/
 AppSupportURL=https://www.instagram.com/evrenot3d/
 AppComments=İngilizce → Türkçe video dublaj · hobi amaçlı, açık kaynak, kişisel kullanım
 VersionInfoVersion={#AppVer}.0
 VersionInfoCompany=Evren TUĞ
-VersionInfoDescription=Doğru mu Samet? kurulumu
-VersionInfoProductName=Doğru mu Samet?
+VersionInfoDescription=SlateVox kurulumu
+VersionInfoProductName=SlateVox
 VersionInfoProductVersion={#AppVer}
 VersionInfoCopyright=Evren TUĞ · açık kaynak
-DefaultDirName={localappdata}\DogruMuSamet
-DefaultGroupName=Doğru mu Samet
+DefaultDirName={localappdata}\SlateVox
+DefaultGroupName=SlateVox
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=cikti
-OutputBaseFilename=DogruMuSamet-Kurulum-{#AppVer}
+OutputBaseFilename=SlateVox-Kurulum-{#AppVer}
 SetupIconFile=logo.ico
 UninstallDisplayIcon={app}\logo.ico
-UninstallDisplayName=Doğru mu Samet?
+UninstallDisplayName=SlateVox
 InfoBeforeFile=bilgi.txt
 WizardStyle=modern
 Compression=lzma2
@@ -64,6 +64,7 @@ Source: "..\sepmodels.py";      DestDir: "{app}"; Flags: ignoreversion
 Source: "..\polarformer.py";    DestDir: "{app}"; Flags: ignoreversion
 Source: "..\vox_worker.py";     DestDir: "{app}"; Flags: ignoreversion
 Source: "..\telaffuz.py";       DestDir: "{app}"; Flags: ignoreversion
+Source: "..\ses_isleme.py";     DestDir: "{app}"; Flags: ignoreversion
 Source: "..\modelleri_indir.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\torch_duzelt.py";   DestDir: "{app}"; Flags: ignoreversion
 Source: "..\requirements.txt";  DestDir: "{app}"; Flags: ignoreversion
@@ -81,12 +82,16 @@ Source: "logo.ico";             DestDir: "{app}"; Flags: ignoreversion
 Source: "python\*";             DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-; Windows kısayol adlarında "?" kullanılamaz; pencere ve program listesinde "Doğru mu Samet?" görünür
-Name: "{autoprograms}\Doğru mu Samet"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\baslat.py"""; WorkingDir: "{app}"; IconFilename: "{app}\logo.ico"; Comment: "İngilizce → Türkçe video dublaj"
-Name: "{autodesktop}\Doğru mu Samet"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\baslat.py"""; WorkingDir: "{app}"; IconFilename: "{app}\logo.ico"; Comment: "İngilizce → Türkçe video dublaj"; Tasks: desktopicon
+Name: "{autoprograms}\SlateVox"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\baslat.py"""; WorkingDir: "{app}"; IconFilename: "{app}\logo.ico"; Comment: "İngilizce → Türkçe video dublaj"
+Name: "{autodesktop}\SlateVox"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\baslat.py"""; WorkingDir: "{app}"; IconFilename: "{app}\logo.ico"; Comment: "İngilizce → Türkçe video dublaj"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\baslat.py"""; WorkingDir: "{app}"; Description: "Doğru mu Samet?'i başlat"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\baslat.py"""; WorkingDir: "{app}"; Description: "SlateVox'u başlat"; Flags: postinstall nowait skipifsilent
+
+[InstallDelete]
+; eski adlı (Doğru mu Samet) kısayollar kaldırılır; AppId aynı kaldığı için eski kurulumun üzerine kurulur
+Type: files; Name: "{autoprograms}\Doğru mu Samet.lnk"
+Type: files; Name: "{autodesktop}\Doğru mu Samet.lnk"
 
 [UninstallRun]
 Filename: "{app}\DURDUR.bat"; WorkingDir: "{app}"; Flags: runhidden; RunOnceId: "Durdur"

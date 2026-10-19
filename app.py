@@ -1,4 +1,4 @@
-"""Doğru mu Samet — masaüstü uygulaması.
+"""SlateVox — masaüstü uygulaması.
 
     BASLAT.bat  (ya da: .venv\\Scripts\\pythonw.exe app.py)
 
@@ -39,7 +39,8 @@ def stop_old_servers() -> None:
     try:
         with urllib.request.urlopen(URL, timeout=1.5) as r:
             body = r.read(20000).decode("utf-8", "replace")
-            if "Doğru mu Samet" not in body and not r.headers.get("Server", "").startswith("DogruMuSamet"):
+            if ("SlateVox" not in body and "Doğru mu Samet" not in body          # eski adlı sürüm de kapatılır
+                    and not r.headers.get("Server", "").startswith(("SlateVox", "DogruMuSamet"))):
                 return
     except Exception:
         return
@@ -105,7 +106,7 @@ def app_id() -> None:
     if os.name == "nt":
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("EvrenTug.DogruMuSamet")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("EvrenTug.SlateVox")
         except Exception:  # noqa: BLE001
             pass
 
@@ -143,7 +144,7 @@ class Api:
 
 
 def main():
-    print(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} Doğru mu Samet başlıyor =====", flush=True)
+    print(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} SlateVox başlıyor =====", flush=True)
     stop_old_servers()
     import server
     srv = server.make_server(PORT)
@@ -158,7 +159,7 @@ def main():
     import webview      # BASLAT.bat eksikse kurar; uygulama yalnızca kendi penceresinde açılır
 
     api = Api()
-    win = webview.create_window("Doğru mu Samet?", URL, width=1560, height=940, min_size=(1100, 680),
+    win = webview.create_window("SlateVox", URL, width=1560, height=940, min_size=(1100, 680),
                                 background_color="#282828", js_api=api, text_select=False, maximized=True)
     api._window = win
 

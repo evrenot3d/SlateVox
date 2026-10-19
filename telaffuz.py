@@ -47,7 +47,7 @@ ENGLISH_RE = re.compile(
 def _download(url: str, dst: Path) -> Path:
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_suffix(dst.suffix + ".part")
-    req = urllib.request.Request(url, headers={"User-Agent": "DogruMuSamet"})
+    req = urllib.request.Request(url, headers={"User-Agent": "SlateVox"})
     with urllib.request.urlopen(req, timeout=120) as r, open(tmp, "wb") as f:
         while True:
             b = r.read(1 << 16)

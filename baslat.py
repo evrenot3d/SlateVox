@@ -1,4 +1,4 @@
-"""Doğru mu Samet? — başlatıcı ve ilk kurulum ekranı.
+"""SlateVox — başlatıcı ve ilk kurulum ekranı.
 
 Masaüstü kısayolu bunu, kurulumla gelen Python ile (python\\pythonw.exe) çalıştırır; hiç terminal penceresi açılmaz.
   * Bileşenler kuruluysa: asıl programı (.venv\\Scripts\\pythonw.exe app.py) açar ve kapanır.
@@ -28,7 +28,7 @@ SETUP_REV = "3"          # kurulum adımları değişince artar: eski kurulumlar
 LOG = BASE / "kurulum.log"
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 DEMO = os.environ.get("DMS_DEMO") == "1"
-TITLE = "Doğru mu Samet?"
+TITLE = "SlateVox"
 
 
 def base_python() -> str:
@@ -388,7 +388,7 @@ def app_id() -> None:
     if os.name == "nt":
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("EvrenTug.DogruMuSamet")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("EvrenTug.SlateVox")
         except Exception:  # noqa: BLE001
             pass
 

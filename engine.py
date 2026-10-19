@@ -1,4 +1,4 @@
-"""Doğru mu Samet — model motoru.
+"""SlateVox — model motoru.
 
 Modeller ilk kullanımda yüklenir ve uygulama açık kaldıkça ekran kartında hazır bekler:
   ses ayırma   UVR-MDX-NET-Voc_FT        (audio-separator, ONNX / CUDA)
@@ -39,7 +39,7 @@ MODELS.mkdir(exist_ok=True)
 os.environ.setdefault("HF_HOME", str(MODELS / "hf"))
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
-VERSION = "0.4.6"
+VERSION = "0.4.7"
 DEMO = os.environ.get("DMS_DEMO") == "1"
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -443,11 +443,12 @@ class LlamaServer:
             time.sleep(0.5)
         raise RuntimeError("llama-server açılmadı (llama-server.log)")
 
-    def chat(self, prompt: str, max_tokens: int) -> str:
+    def chat(self, prompt: str, max_tokens: int, system: str | None = None, extra: dict | None = None) -> str:
+        msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
         body = json.dumps({
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": msgs,
             "temperature": 0.1, "top_p": 0.6, "top_k": 20, "repeat_penalty": 1.05,
-            "max_tokens": max_tokens, "stream": False,
+            "max_tokens": max_tokens, "stream": False, **(extra or {}),
         }).encode("utf-8")
         req = urllib.request.Request(f"http://127.0.0.1:{self.PORT}/v1/chat/completions", data=body,
                                      headers={"Content-Type": "application/json"})
@@ -474,6 +475,49 @@ class LlamaServer:
                 self.proc.kill()
         self.proc = None
         self.model = None
+
+
+# Çeviri iyileştirme (Gelişmiş): makine çevirisini İngilizce aslına ve bağlama bakarak düzelten Türkçe dil modelleri
+# (llama.cpp sohbet şablonuyla). "think": düşünen ("T1") model; düşünme kapatılır ya da çıktıdan temizlenir.
+PE_MODELS = {
+    "petr": {"name": "Trendyol-LLM-8B-T1", "repo": "mradermacher/Trendyol-LLM-8B-T1-i1-GGUF",
+             "file": "Trendyol-LLM-8B-T1.i1-Q4_K_M.gguf", "dir": "trendyol-llm", "layers": 36, "ctx": 4096,
+             "overhead": 900, "size_mb": 4800, "qwen3": True, "demo_s": 0.6},
+    "pecos": {"name": "Cosmos Turkish-Gemma-9B-T1", "repo": "ytu-ce-cosmos/Turkish-Gemma-9b-T1-GGUF",
+              "file": "Turkish-Gemma-9b-T1.Q4_K_M.gguf", "dir": "cosmos-gemma", "layers": 42, "ctx": 4096,
+              "overhead": 1100, "size_mb": 5500, "qwen3": False, "demo_s": 0.8},
+}
+PE_SYSTEM = ("Sen deneyimli bir Türkçe dublaj çevirmenisin. Sana bir videodan ardışık cümleler verilecek: her birinin "
+             "İngilizce aslı (EN) ve makine çevirisi (TR). Görevin TR'yi düzeltmek:\n"
+             "- Anlam İngilizce asılla aynı olsun; bilgi ekleme, çıkarma.\n"
+             "- Doğal, akıcı konuşma Türkçesi olsun (seslendirilecek; yazı dili değil).\n"
+             "- Zamirler, sen/siz hitabı, adlar ve terimler cümleler arasında tutarlı olsun.\n"
+             "- Uzunluk aşağı yukarı aynı kalsın; cümle konuşma süresine sığmalı.\n"
+             "- Çeviri zaten iyiyse aynen bırak. Adları (Michael, Brooklyn...) çevirme.\n"
+             "Yalnız düzeltilmiş TR satırlarını, numarasıyla ve her biri tek satırda yaz: \"3. ...\". Açıklama yazma.")
+PE_BATCH, PE_CONTEXT = 8, 3                 # bir istekte düzeltilen cümle sayısı, önceki bağlam cümlesi
+
+
+def _pe_parse(out: str, nums: list) -> dict:
+    out = re.sub(r"<think>.*?</think>", "", out or "", flags=re.S)
+    out = re.sub(r"^.*</think>", "", out, flags=re.S)          # açılışı kesilmiş düşünme bloğu
+    got = {}
+    for ln in out.splitlines():
+        m = re.match(r"\s*\**\s*(?:TR\s*)?(\d+)\s*[.):-]\s*\**\s*(?:TR\s*:\s*)?(.+)", ln)
+        if m and int(m.group(1)) in nums and int(m.group(1)) not in got:
+            got[int(m.group(1))] = m.group(2).strip().strip('"“”*').strip()
+    return got
+
+
+def _pe_ok(new: str, old: str) -> bool:
+    """Sapma koruması: boş, çok kısa / uzun ya da başka dilde (İngilizce kalmış) çıktı alınmaz."""
+    if not new or not old:
+        return False
+    r = len(new) / max(1, len(old))
+    if r < 0.5 or r > 1.7:
+        return False
+    tr_chars = sum(c in "çğıöşüÇĞİÖŞÜ" for c in new)
+    return tr_chars > 0 or sum(c in "çğıöşüÇĞİÖŞÜ" for c in old) == 0
 
 
 MT_PROMPT = ("Translate the following text into Turkish. Note that you should only output the translated "
@@ -508,6 +552,38 @@ LAUGH_RE = re.compile(r"\b(ha(ha)+|he(he)+|lol)\b|\((laugh|chuckl)|\[(laugh|chuc
 COMFORT_RE = re.compile(r"\b(don'?t worry|it'?s (ok(ay)?|alright|all right)|calm down|deep breath|"
                         r"(it|everything)('?ll| will) be (ok(ay)?|fine|alright)|i'?m here for you|"
                         r"sorry for your|not your fault|i understand)\b", re.I)
+
+
+# VoxCPM2 "Türkçe aksan modu": duygu, metnin başına parantezli talimatla verilir (VoxCPM2'nin denetimli kopyalaması).
+# İfadeler Ahenk'in instruction_pick.py'sinden (Özgür Güler, Apache-2.0): ilk iki kelimeden biri "c" ile başlıyorsa
+# Türkçe talimat (İngilizce talimattan sonra baştaki "c" İngilizce okunabiliyor), değilse İngilizce (duygu daha güçlü).
+VOX_INSTR = {
+    "angry": ("Angry tone, voice getting louder.", "Kızgın bir ses tonuyla, sesi giderek yükselerek."),
+    "cheerful": ("Cheerful and warm, smiling while speaking.", "Neşeli ve sıcak, konuşurken gülümseyerek."),
+    "sad": ("Sad and quiet, with a heavy heart.", "Üzgün ve sessiz, içi burkularak."),
+    "calm": ("Calm, slow and soothing.", "Sakin, yavaş ve yatıştırıcı."),
+    "surprised": ("Astonished, with rising intonation.", "Şaşkın, yükselen bir tonlamayla."),
+    "empathetic": ("Warm and compassionate, as if comforting someone.", "Sıcak ve şefkatli, birini teselli eder gibi."),
+    "laughing": ("Laughing heartily while speaking.", "Konuşurken kahkahalarla gülerek."),
+}
+
+
+def vox_accent_text(text: str, emotion: str = "") -> str:
+    """Türkçe aksan modu: metin trnorm ile okunuş biçimine çevrilir, duygu varsa başına talimat eklenir."""
+    try:
+        if str(BASE) not in sys.path:
+            sys.path.insert(0, str(BASE))
+        from trnorm import normalize
+        t = normalize(text).strip() or text
+    except Exception:  # noqa: BLE001
+        t = text
+    t = t.lstrip("([").strip() or t                    # "(" ile başlayan metin talimat sanılmasın
+    pair = VOX_INSTR.get(emotion or "")
+    if not pair:
+        return t
+    first = re.findall(r"[^\W_]+", t.translate(str.maketrans({"I": "ı", "İ": "i"})).lower())[:2]
+    instr = pair[1] if any(w.startswith("c") for w in first) else pair[0]
+    return f"({instr}){t}"
 
 
 def vox_python() -> Path | None:
@@ -662,8 +738,9 @@ class VoxProc:
 
 
 def atempo(a: np.ndarray, sr: int, f: float, tmpdir: Path) -> np.ndarray:
-    """Perdeyi bozmadan hızlandırır (ffmpeg atempo)."""
-    if f <= 1.01:
+    """Perdeyi bozmadan hızlandırır / yavaşlatır (ffmpeg atempo; f > 1 hızlı). Dublaj yalnız hızlandırır;
+    yavaşlatma, cümle düzenlemede kullanıcının seçtiği hız içindir."""
+    if abs(f - 1.0) <= 0.01:
         return a
     i, o = tmpdir / "_t_in.wav", tmpdir / "_t_out.wav"
     write_wav(i, a, sr)
@@ -1042,6 +1119,52 @@ class Engine:
                 on("calisiyor", (i + 1) / max(1, len(texts)) * 100, f"{i + 1}/{len(texts)} cümle")
             return out
 
+    # ---- 3b) çeviri iyileştirme (Gelişmiş, deneysel)
+    def refine(self, en: list, tr: list, durs: list, on, model: str) -> list:
+        """Makine çevirisini, cümlenin İngilizce aslına ve önceki cümlelere bakarak düzeltir (PE_BATCH'lik gruplar).
+        Model bir satırı bozarsa / atlarsa o satırın ilk çevirisi kalır (_pe_ok)."""
+        m = PE_MODELS[model]
+        n = len(tr)
+        if DEMO:
+            time.sleep(m["demo_s"])
+            return [t.replace("(demo ", "(iyileştirildi · demo ", 1) if i % 3 == 0 else t for i, t in enumerate(tr)]
+        with self.lock:
+            path = MODELS / m["dir"] / m["file"]
+            if not path.exists():
+                from huggingface_hub import hf_hub_download
+                with download_watch(on, m["name"], [MODELS / m["dir"]], m["size_mb"], False):
+                    path = Path(hf_hub_download(m["repo"], m["file"], local_dir=str(MODELS / m["dir"])))
+            if not (self._llama.running() and self._llama.model == path):
+                self._llama.stop()
+                size = path.stat().st_size / 2 ** 20
+                self.make_room(int(size + m["overhead"] + 300), keep=("llama",))
+                on("indiriliyor", 0, f"Çeviri iyileştirme modeli yükleniyor ({m['name']})")
+                self._llama.start(path, on, ngl=self._fit_layers(size, m), ctx=m["ctx"], jinja=True)
+            extra = {"chat_template_kwargs": {"enable_thinking": False}} if m["qwen3"] else {}
+            out = list(tr)
+            on("calisiyor", 0, f"0/{n} cümle")
+            for b0 in range(0, n, PE_BATCH):
+                idx = [i for i in range(b0, min(n, b0 + PE_BATCH)) if (tr[i] or "").strip()]
+                if not idx:
+                    continue
+                ctx_lines = [f"(önceki) EN: {en[i]}\n(önceki) TR: {out[i]}" for i in range(max(0, b0 - PE_CONTEXT), b0)
+                             if (out[i] or "").strip()]
+                lines = [f"{i + 1}. EN: {en[i]}\n{i + 1}. TR: {tr[i]}   [süre {durs[i]:.1f} sn]" for i in idx]
+                prompt = ("Bağlam (düzeltme, yalnız oku):\n" + "\n".join(ctx_lines) + "\n\n" if ctx_lines else "") + \
+                    "Düzeltilecek cümleler:\n" + "\n".join(lines) + ("\n/no_think" if m["qwen3"] else "")
+                try:
+                    r = self._llama.chat(prompt, 900 if m["qwen3"] else 1800, system=PE_SYSTEM, extra=extra)
+                except Exception as e:  # noqa: BLE001 — bir grup olmazsa ilk çeviri kalır
+                    print("[iyileştirme]", e, flush=True)
+                    r = ""
+                got = _pe_parse(r, [i + 1 for i in idx])
+                for i in idx:
+                    new = clean_translation(got.get(i + 1, ""), "")
+                    if _pe_ok(new, tr[i]):
+                        out[i] = new
+                on("calisiyor", min(n, b0 + PE_BATCH) / max(1, n) * 100, f"{min(n, b0 + PE_BATCH)}/{n} cümle")
+            return out
+
     # ---- 4) dublaj
     @staticmethod
     def _tts_seen(gender: str) -> bool:
@@ -1116,10 +1239,13 @@ class Engine:
 
     # ---- 4b) dublaj · VoxCPM2 (sesi kopyalar, duyguyu taşır)
     def dub_vox(self, segs: list, voc_path: Path, voices: list, chunk_dur: float, target_rms: float, on,
-                seed: int = 0, work: Path | None = None, steps: int = VOX_STEPS) -> tuple[np.ndarray, list]:
+                seed: int = 0, work: Path | None = None, steps: int = VOX_STEPS, accent: bool = False,
+                emotions: list | None = None) -> tuple[np.ndarray, list]:
         """Her cümle, ses ayırmadan çıkan kendi İngilizce sesi + metniyle (devam ettirme) okunur: vurgu, hız ve duygu
         taşınır. Ses rengi için ayrıca ≥3 sn örnek verilir (kısa cümlede aynı sesin komşu cümleleri eklenir).
-        Her cümlenin ses gücü özgününe eşlenir (bağırma yüksek, fısıltı alçak kalır)."""
+        Her cümlenin ses gücü özgününe eşlenir (bağırma yüksek, fısıltı alçak kalır).
+        accent=True ("Türkçe aksan modu", Gelişmiş): devam ettirme kullanılmaz (İngilizce ağız yapısı Türkçeye
+        sızmasın); yalnız ses rengi örneği + algılanan duygu talimatı "(talimat)metin"; metin trnorm'dan geçer."""
         x, sr = read_wav(voc_path)
         mono = x.mean(axis=1) if x.ndim > 1 else x
         n = len(segs)
@@ -1170,9 +1296,11 @@ class Engine:
                         write_wav(pw, resample(own, sr, 16000), 16000)
                         write_wav(rw, resample(ref, sr, 16000), 16000)
                         en = (s.get("en") or "").strip()
-                        req = {"text": text, "out": str(ow), "ref_wav": str(rw), "cfg": VOX_CFG, "steps": int(steps),
+                        say = vox_accent_text(text, emotions[i] if emotions and i < len(emotions) else "") \
+                            if accent else text
+                        req = {"text": say, "out": str(ow), "ref_wav": str(rw), "cfg": VOX_CFG, "steps": int(steps),
                                "seed": int(seed) * 1000 + i}
-                        if en and len(own) / sr >= 0.5:
+                        if en and len(own) / sr >= 0.5 and not accent:
                             req.update(prompt_wav=str(pw), prompt_text=en)
                         self._vox.run(req)
                         y, ysr = read_wav(ow)

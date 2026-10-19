@@ -85,7 +85,7 @@ class YouTube:
         if os.name == "nt" and not (BIN / "deno.exe").exists() and not shutil.which("deno"):
             upd("YouTube doğrulama bileşeni (Deno) indiriliyor (bir kerelik)")
             BIN.mkdir(parents=True, exist_ok=True)
-            req = urllib.request.Request(DENO_URL, headers={"User-Agent": "dogru-mu-samet"})
+            req = urllib.request.Request(DENO_URL, headers={"User-Agent": "slatevox"})
             with urllib.request.urlopen(req, timeout=600) as r:
                 data = r.read()
             with zipfile.ZipFile(io.BytesIO(data)) as z:

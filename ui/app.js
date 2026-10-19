@@ -1,4 +1,4 @@
-/* "Doğru mu Samet?" — masaüstü arayüzü
+/* SlateVox — masaüstü arayüzü
    Video sol tarafta oynar; Türkçe dublaj parça parça hazırlandıkça Web Audio ile videoya kilitlenerek çalınır.
    Uyarlamalı buffering: ölçülen işlem hızına göre, takılmadan izlenebilecek ana kadar beklenir. */
 (() => {
@@ -209,15 +209,45 @@ const slowTts = () => (isPreset() ? "VoxCPM2" : isAdv() && ["vox", "ahenk", "ahe
 const PRON_FLAGS = { cmu: "CMU sözlüğü", g2p: "yapay zekâ" };
 const usesPron = () => isAdv() && S.tts !== "vox";
 const pronSfx = () => (usesPron() ? (S.pronCmu ? "~cmu" : "") + (S.pronG2p ? "~g2p" : "") : "");
+/* Gelişmiş · VoxCPM2: Türkçe aksan modu (İngilizce devam ettirme yok; ses rengi + duygu talimatı) */
+const usesVoxTr = () => isAdv() && S.tts === "vox";
+const voxTrOn = () => usesVoxTr() && !!S.voxTr;
+/* Gelişmiş · çeviri iyileştirme: makine çevirisini bağlama bakarak düzelten Türkçe dil modeli */
+const PRESET_PE = "pecos";                             // Güçlü: çeviri iyileştirme sabit (Cosmos); Orta'da yok
+const PE_MODELS = {
+  "": { name: "Kapalı", note: "ilk çeviri olduğu gibi seslendirilir" },
+  petr: { name: "Trendyol-LLM-8B-T1", note: "deneysel · anlamı iyi korur (Qwen3 tabanlı) · ~4,8 GB", exp: true },
+  pecos: { name: "Cosmos Turkish-Gemma-9B-T1", note: "deneysel · akıcı Türkçe (Gemma 2 tabanlı, YTÜ) · ~5,5 GB", exp: true },
+};
+const peSfx = () => (isAdv() && S.pe && PE_MODELS[S.pe] ? "~" + S.pe : "");
+/* Gelişmiş · ses işleme (stüdyo miksi, deneysel): yapay zekâ değil, dublaj stüdyolarının son işleme adımları.
+   İşlenmemiş dublaj ayrı saklanır; anahtar değişince yalnız bu işlem yeniden yapılır (birkaç saniye) */
+const MIX_FLAGS = {
+  mixm: { name: "Ses rengini eşleme + hafif ortam yankısı",
+          note: "orijinale benzer tını",
+          tip: "Dublaj sesinin frekans dağılımı (bas, orta, tiz dengesi) aynı parçadaki İngilizce konuşmanınkine yarı yarıya yaklaştırılır (en çok ±6 dB). Ardından kısa (≈0,3 sn) ve hafif bir oda yankısı eklenir. Ses, stüdyoda ayrı okunmuş gibi değil, sahnedeki kişinin mikrofonundan geliyormuş gibi duyulur." },
+  mixd: { name: "De-esser, EQ ve kompresör",
+          note: "yumuşak, dengeli ses",
+          tip: "80 Hz altındaki uğultu kesilir. De-esser, yapay seslerde kulağı tırmalayan sert “s, ş, ç” seslerini kısar. EQ, 3,5 kHz civarındaki yapay parlaklığı hafifçe azaltır. Kompresör, fısıltı ile bağırma arasındaki farkı daraltır; her cümle rahat duyulur." },
+  mixl: { name: "Loudness standardı",
+          note: "eşit ses yüksekliği",
+          tip: "Algılanan ses yüksekliği (LUFS, ITU-R BS.1770) orijinal konuşmayla eşlenir; tepeler −1 dB'de sınırlanır, patlama olmaz. Video ya da tüm ses dışa aktarılırken son karışım −16 LUFS'a (YouTube / internet standardı) getirilir." },
+};
+S.mix = Object.fromEntries(Object.keys(MIX_FLAGS).map((f) => [f, store.get("mix." + f, true) !== false]));   // varsayılan: hepsi açık
+const mixSfx = () => (isAdv() ? Object.keys(MIX_FLAGS).filter((f) => S.mix[f]).map((f) => "~" + f).join("") : "");
+const MIX_ALL = new Set(["orta", "guclu"]);              // Orta · Güçlü: ses işleme sabit, hepsi açık
 const variant = () => S.mode === "hizli" ? "hizli-" + S.gender
   : isPreset() ? "detayli~vox~" + S.mode
   : "detayli" + (S.sep && S.sep !== "uvr" ? "-" + S.sep : "") + (S.mt && S.mt !== MT_DEFAULT ? "~" + S.mt : "") +
-    (TTS_IDS.includes(S.tts) ? "~" + S.tts : "") + pronSfx();
+    (TTS_IDS.includes(S.tts) ? "~" + S.tts : "") + pronSfx() + (voxTrOn() ? "~aksan" : "") + peSfx() + mixSfx();
 const parseV = (v) => { const [base, ...opts] = String(v || "").split("~"); return { base, det: base.startsWith("detayli"),
   sep: base.startsWith("detayli-") ? base.split("-")[1] : base.startsWith("hizli") || opts.some((o) => PRESETS[o]) ? "bandit2" : "uvr",
   mt: opts.find((o) => MT_MODELS[o]) || MT_DEFAULT,
   tts: opts.find((o) => TTS_IDS.includes(o)) || "std", preset: opts.find((o) => PRESETS[o]) || "",
-  pron: Object.keys(PRON_FLAGS).filter((f) => opts.includes(f)) }; };
+  pron: Object.keys(PRON_FLAGS).filter((f) => opts.includes(f)),
+  aksan: opts.includes("aksan") || opts.some((o) => PRESETS[o]),
+  pe: opts.find((o) => o && PE_MODELS[o]) || (opts.includes("guclu") ? PRESET_PE : ""),
+  mix: Object.keys(MIX_FLAGS).filter((f) => opts.includes(f) || opts.some((o) => MIX_ALL.has(o))) }; };
 /* varyantta gerçekten çalışan ses modeli (Hızlı'nın sesleri dahil) */
 const ttsOfV = (v) => { const p = parseV(v); return p.det ? p.tts : HIZLI_TTS[p.base.split("-")[1]] || "antalia"; };
 const fmt = (t) => { t = Math.max(0, t | 0); const h = (t / 3600) | 0, m = ((t % 3600) / 60) | 0, s = t % 60;
@@ -505,8 +535,9 @@ function drawRange() {
   $("#rngA").style.left = pa + "%"; $("#rngB").style.left = pb + "%";
   $("#rngL").style.width = pa + "%"; $("#rngR").style.left = pb + "%"; $("#rngR").style.width = (100 - pb) + "%";
   const full = !rangeOrNull();
-  $("#rangeRow").hidden = !S.video;
-  $("#rangeTxt").textContent = full ? `Tüm video · ${fmt(d)}` : `${fmt(a)} – ${fmt(b)} · ${fmt(b - a)}`;
+  $("#rangeRow").hidden = !S.video || full;
+  $("#rangeTxt").innerHTML = full ? "" : `<b>${fmt(a)} – ${fmt(b)}</b> · ${fmt(b - a)}` +   // mikserde, arka planın sağında
+    (rangeDirty() ? ` <em title="“Dublajı Başlat” ile bu aralık baştan dublajlanır">· yeni</em>` : "");
   $("#rangeAll").hidden = full;
   $("#rngA").dataset.t = fmt(a); $("#rngB").dataset.t = fmt(b);
 }
@@ -566,20 +597,27 @@ function adoptRange(st) {                                 // sunucu cümle boşl
 }
 
 /* ================= mikser ================= */
-const mix = { dub: 70, bg: 150, en: 0, mute: {} };   // her açılışta standart seviyeler
+/* her açılışta standart seviyeler. Konuşma kaydırıcısı tektir: üstündeki anahtar Türkçe dublaj ile İngilizce orijinal
+   arasında geçer; her dilin seviyesi ayrı tutulur (Türkçe %70, İngilizce %150 — elle değiştirilebilir) */
+const mix = { dub: 70, bg: 150, en: 150, lang: "dub", mute: {} };
+const gainOf = (ch) => (mix.mute[ch] ? 0 : ch === "bg" ? mix.bg / 100 : mix.lang === ch ? mix[ch] / 100 : 0);
+function applyGains() { for (const ch of ["dub", "bg", "en"]) gains[ch].gain.setTargetAtTime(gainOf(ch), ctx.currentTime, 0.02); }
 for (const el of $$(".ch")) {
   const ch = el.dataset.ch, r = $("input", el), o = $("output", el);
-  const apply = () => {
-    const v = +r.value; r.style.setProperty("--p", (v / 150) * 100 + "%"); o.textContent = v + "%";
-    const muted = !!mix.mute[ch]; el.classList.toggle("muted", muted);
-    gains[ch].gain.setTargetAtTime(muted ? 0 : v / 100, ctx.currentTime, 0.02);
-    mix[ch] = v;
-  };
-  r.value = mix[ch] ?? r.value;
-  r.addEventListener("input", apply);
-  $(".chbtn", el).addEventListener("click", () => { mix.mute[ch] = !mix.mute[ch]; apply(); });
-  apply();
+  const key = () => (ch === "dub" ? mix.lang : ch);              // konuşma kaydırıcısı seçili dilin seviyesini gösterir
+  const show = () => { const v = mix[key()]; r.value = v; r.style.setProperty("--p", (v / 150) * 100 + "%"); o.textContent = v + "%"; };
+  r.addEventListener("input", () => { mix[key()] = +r.value; show(); applyGains(); });
+  $(".chbtn", el)?.addEventListener("click", () => { mix.mute[ch] = !mix.mute[ch]; el.classList.toggle("muted", !!mix.mute[ch]); applyGains(); });
+  el.show = show;
+  show();
 }
+$("#langSw").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-l]"); if (!b || b.dataset.l === mix.lang) return;
+  mix.lang = b.dataset.l;
+  $$("#langSw button").forEach((x) => x.classList.toggle("on", x === b));
+  $('.ch[data-ch="dub"]').show(); applyGains();
+});
+applyGains();
 function setMixer(on) { $("#mixer").dataset.off = on ? "0" : "1"; vid.muted = !!on; }
 $("#ccBtn").addEventListener("click", () => { S.cc = !S.cc; $("#ccBtn").classList.toggle("on", S.cc); S.active = -2; tick(); });
 
@@ -615,7 +653,10 @@ function renderSubs() {
     // İngilizce ad okunuşu: sese giden Türkçe yazım (altyazı değişmez)
     const pron = S.lang === "tr" && s.pron?.length ? s.pron.map(([a, b]) =>
       `<span class="emo" title="Ses modeline bu okunuşla gitti">${esc(a)} → ${esc(b)}</span>`).join("") : "";
-    html += `<div class="sub" data-i="${i}"><span class="t">${fmt(s.start)}${g}</span><span class="x">${esc(S.lang === "tr" ? (s.tr || s.en) : s.en)}${emo}${pron}</span></div>`;
+    const peTag = S.lang === "tr" && s.tr0 ? `<span class="emo" title="İlk çeviri: ${esc(s.tr0)}">düzeltildi</span>` : "";
+    const ed = canEdit() ? `<button type="button" class="sedit" data-i="${i}" title="Düzenle ve yeniden seslendir">` +
+      `<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m14 6 4 4"/></svg></button>` : "";
+    html += `<div class="sub${s.edit ? " edited" : ""}" data-i="${i}"><span class="t">${fmt(s.start)}${g}</span><span class="x">${esc(S.lang === "tr" ? (s.tr || s.en) : s.en)}${peTag}${emo}${pron}</span>${ed}</div>`;
   });
   if (!html) html = `<div class="empty">Seçili seste cümle yok.</div>`;
   if (S.status && !S.status.complete) html += `<div class="subsep">Sonraki bölümler hazırlanıyor…</div>`;
@@ -720,11 +761,80 @@ function updateSubs(t) {
 }
 subList.addEventListener("wheel", () => { S.userScroll = performance.now(); }, { passive: true });
 subList.addEventListener("click", (e) => {
+  const eb = e.target.closest(".sedit");
+  if (eb) { e.stopPropagation(); openEditor(S.segs[+eb.dataset.i]); return; }
   const el = e.target.closest(".sub"); if (!el) return;
   const s = S.segs[+el.dataset.i]; if (!s) return;
   vid.currentTime = clampT(s.start + 0.01); S.userScroll = 0;
   if (!vid.wantPlay && !S.bufPaused) { S.autoplay = false; S.gate = true; playVideo(); }     // o cümleden oynat
 });
+/* ================= cümle düzenleme: metni / okunuşu / duyguyu / sesi / hızı değiştirip yalnız o cümleyi yeniden seslendir ===== */
+function canEdit() { return !!(S.av && S.video && S.status?.variant === S.av && !isHist()); }
+const PAIR_TTS = new Set(["std", "cepant", "ahenkant"]);
+const SPEEDS = [[0.85, "daha yavaş"], [0.92, "biraz yavaş"], [1, "normal"], [1.08, "biraz hızlı"], [1.16, "daha hızlı"]];
+function openEditor(s) {
+  if (!s || !canEdit()) return;
+  const t = ttsOfV(S.av), ed = s.edit || {};
+  const emoOn = AHENK.has(t) || parseV(S.av).aksan, pair = PAIR_TTS.has(t);
+  const curEmo = s.emo || "neutral", curVoice = ed.voice || s.g || "kadin", curSpeed = ed.speed || 1;
+  const emoOpts = [["neutral", "düz"], ...Object.entries(EMO_TR)].map(([k, n]) =>
+    `<option value="${k}"${k === curEmo ? " selected" : ""}>${n}${k === "laughing" && (t === "ahenkcep" || t === "cepant") ? " (Cep'te neşeli okunur)" : ""}</option>`).join("");
+  const spOpts = SPEEDS.map(([v, n]) => `<option value="${v}"${Math.abs(v - curSpeed) < 0.01 ? " selected" : ""}>${n}</option>`).join("");
+  const pronTxt = s.pron?.length ? s.pron.map(([a, b]) => `${a} → ${b}`).join(", ") : "";
+  showModal("Cümleyi düzenle", `<div class="edform">
+    <div class="edrow"><span class="edl">İngilizce</span><div class="eden">${esc(s.en)}</div></div>
+    ${s.tr0 ? `<div class="edrow"><span class="edl">İlk çeviri <em>(iyileştirmeden önce)</em></span>
+      <div class="eden">${esc(s.tr0)} <button type="button" class="btn small" id="edUse0">Bunu kullan</button></div></div>` : ""}
+    <label class="edrow"><span class="edl">Türkçe metin</span><textarea id="edTr" rows="3">${esc(s.tr || "")}</textarea></label>
+    <label class="edrow"><span class="edl">Okunuş <em>isteğe bağlı</em></span>
+      <input id="edSay" type="text" value="${esc(ed.say || "")}" placeholder="Boş bırakılırsa Türkçe metin okunur${pronTxt ? " (" + esc(pronTxt) + ")" : ""}">
+      <small>Ses modeline yalnız bu gider; altyazı Türkçe metin olarak kalır. Bir kelime yanlış okunuyorsa okunduğu gibi yazın (ör. Maykıl).</small></label>
+    <div class="edgrid">
+      ${emoOn ? `<label class="edrow"><span class="edl">Duygu</span><select id="edEmo">${emoOpts}</select>
+        ${pair ? "<small>Erkek seste (Antalia) duygu yok.</small>" : ""}</label>` : ""}
+      ${pair ? `<label class="edrow"><span class="edl">Ses</span><select id="edVoice">
+        <option value="kadin"${curVoice === "kadin" ? " selected" : ""}>kadın</option>
+        <option value="erkek"${curVoice === "erkek" ? " selected" : ""}>erkek</option></select></label>` : ""}
+      <label class="edrow"><span class="edl">Konuşma hızı</span><select id="edSpeed">${spOpts}</select></label>
+    </div>
+    <label class="edchk"><input type="checkbox" id="edNew" class="tg"><span>Farklı bir okuma dene <em>(her denemede başka tonlama)</em></span></label>
+    <div class="edfoot"><span id="edMsg" class="dim">Yalnız bu cümle yeniden seslendirilir · ${esc(TTS_NAME(t))}</span>
+      <button type="button" class="btn" id="edCancel">Vazgeç</button>
+      <button type="button" class="btn primary" id="edApply">Uygula</button></div>
+  </div>`);
+  $("#edCancel").onclick = () => ($("#modal").hidden = true);
+  $("#edApply").onclick = () => applyEdit(s);
+  if ($("#edUse0")) $("#edUse0").onclick = () => { $("#edTr").value = s.tr0; $("#edTr").focus(); };
+  setTimeout(() => $("#edTr")?.focus(), 30);
+}
+async function applyEdit(s) {
+  const btn = $("#edApply"), msg = $("#edMsg");
+  const body = { video_id: S.video.video_id, variant: S.av, k: s.k, j: s.j, tr: $("#edTr").value,
+                 say: $("#edSay").value, speed: +$("#edSpeed").value, new_seed: $("#edNew").checked };
+  if ($("#edEmo")) body.emotion = $("#edEmo").value;
+  if ($("#edVoice")) body.voice = $("#edVoice").value;
+  if (!body.tr.trim()) { msg.textContent = "Türkçe metin boş olamaz."; return; }
+  btn.disabled = true; btn.textContent = "Seslendiriliyor…";
+  msg.textContent = "Cümle yeniden seslendiriliyor (dublaj sürüyorsa sırasını bekler)…";
+  try {
+    const av = S.av, info = await api("/api/resay", body);
+    if (av !== S.av) return;
+    const c = S.chunks.get(s.k) || { info: null, buf: null, loading: null, used: 0 };
+    S.chunks.set(s.k, c);
+    c.info = info; addSegments(info);
+    const e = S.playing.get(s.k); if (e) { killEntry(e); S.playing.delete(s.k); }     // çalıyorsa yeni sesle başlasın
+    if (c.buf) {
+      const dub = await ctx.decodeAudioData(await (await fetch(info.audio.dub)).arrayBuffer());
+      if (av === S.av && c.buf) c.buf.dub = dub;
+    }
+    $("#modal").hidden = true;
+    toast(info.overlap ? "Yeniden seslendirildi · uzun okundu, sonraki cümleyle biraz çakışıyor" : "Cümle yeniden seslendirildi");
+    S.active = -2; tick();
+  } catch (err) {
+    msg.textContent = "Olmadı: " + err.message;
+    btn.disabled = false; btn.textContent = "Uygula";
+  }
+}
 for (const b of $$("#pSubs .ptab")) b.addEventListener("click", () => {
   S.lang = b.dataset.lang; $$("#pSubs .ptab").forEach((x) => x.classList.toggle("on", x === b)); renderSubs(); tick();
 });
@@ -739,8 +849,9 @@ const FIXED_SEP = "bandit2";                           // standart ses ayırma: 
 if (!store.get("sepStd", false)) { S.sep = FIXED_SEP; store.set("sep", S.sep); store.set("sepStd", true); }   // bir kez: BandIt v2'ye geç
 if (!SEP_MODELS[S.sep]) S.sep = FIXED_SEP;
 /* buffering: her modda açık başlar (VoxCPM2'li modlar uzun sürer, izlerken hazırlanması rahat olur); her mod kendi ayarını tutar */
-S.bufMode = { hizli: true, orta: true, guclu: true, gelismis: true };
-Object.defineProperty(S, "bufOn", { configurable: true, get: () => !!S.bufMode[S.mode], set: (v) => { S.bufMode[S.mode] = !!v; } });
+S.bufMode = { hizli: true, orta: true, guclu: true, gelismis: store.get("bufAdv", true) !== false };
+Object.defineProperty(S, "bufOn", { configurable: true, get: () => !!S.bufMode[S.mode],
+  set: (v) => { S.bufMode[S.mode] = !!v; if (S.mode === "gelismis") store.set("bufAdv", !!v); } });
 S.autoplay = false;                                    // dublaj başlatılınca: hazır olunca kendiliğinden oynat
 S.scrub = null;                                        // çubuk sürüklenirken {t: yuvarlağın yeri, to: önizleme}
 /* çeviri modelleri: tahmini kaliteye göre iyiden kötüye */
@@ -762,12 +873,13 @@ const TTS_MODELS = {                                   // sıra: önerilen önce
   ahenkant: { name: "Ahenk + Antalia-2 Mini", note: "deneysel · kadınları Ahenk (duygulu), erkekleri Antalia-2 Mini okur · yavaş", exp: true },
 };
 const TTS_NAME = (id) => TTS_MODELS[id]?.name || "EMA Lightning + Antalia-2 Mini";
-S.tts = "vox";                                         // Gelişmiş'te her açılışta VoxCPM2
+S.tts = TTS_MODELS[store.get("tts", "vox")] ? store.get("tts", "vox") : "vox";   // Gelişmiş: son seçim hatırlanır
 /* aşama → modelin hız istatistiğindeki anahtarı (sunucudaki stage_model ile aynı) */
 const statKey = (st, v) => { const p = parseV(v), t = ttsOfV(v);
   const n = p.preset ? PRESETS[p.preset].steps : p.det ? stepsOf(t) : HIZLI_STEPS;
   return { separate: "sep:" + p.sep, transcribe: "asr:whisper-turbo", gender: "gender:vgc", emotion: "emo:jh", translate: "mt:" + p.mt,
-           dub: stepInfo(t) ? `tts:${t}:${n}` : t === "std" ? "tts:ema+antalia" : "tts:" + t }[st]; };
+           refine: "pe:" + p.pe, mix: "mix:studio",
+           dub: t === "vox" && p.aksan ? `tts:voxtr:${n}` : stepInfo(t) ? `tts:${t}:${n}` : t === "std" ? "tts:ema+antalia" : "tts:" + t }[st]; };
 const fmtSec = (x) => (x < 10 ? `${x.toFixed(1).replace(".", ",")} sn` : x < 60 ? `${Math.round(x)} sn`
   : `${Math.floor(x / 60)} dk ${String(Math.round(x % 60)).padStart(2, "0")} sn`);
 const perMin = (key) => S.stats?.models?.find((m) => m.key === key)?.per_min;
@@ -784,11 +896,25 @@ function modelRows() {
     { st: "transcribe", stage: "İngilizce metin", model: "Whisper Large V3 Turbo" },
   ];
   if (det || pre || auto) rows.push({ st: "gender", stage: "Kadın / erkek", model: "Voice Gender Classifier" });
-  if (!pre && AHENK.has(cur)) rows.push({ st: "emotion", stage: "Duygu", model: "Emotion DistilRoBERTa + ses şiddeti" });
+  if (pre || AHENK.has(cur) || voxTrOn()) rows.push({ st: "emotion", stage: "Duygu", model: "Emotion DistilRoBERTa + ses şiddeti" });
   if (!det) rows.push({ st: "pron", stage: "Ad okunuşu", model: "CMU sözlüğü + yapay zekâ tahmini" });   // hep açık
-  rows.push({ k: det ? "mt" : "", st: "translate", stage: "Türkçe çeviri", model: mm.name, tag: det && mm.slow ? "yavaş" : "" },
-            { k: det ? "tts" : "", st: "dub", stage: "Türkçe ses", model: tts,
+  rows.push({ k: det ? "mt" : "", st: "translate", stage: "Türkçe çeviri", model: mm.name, tag: det && mm.slow ? "yavaş" : "" });
+  if (det) rows.push({ k: "pe", st: "refine", stage: "Çeviri iyileştirme", model: PE_MODELS[S.pe || ""].name,
+                       tag: S.pe ? "deneysel" : "" });
+  else if (S.mode === "guclu") rows.push({ st: "refine", stage: "Çeviri iyileştirme", model: PE_MODELS[PRESET_PE].name });
+  rows.push(
+            { k: det ? "tts" : "", st: "dub", stage: "Türkçe ses", model: tts + (pre ? " · Türkçe aksan modu" : ""),
               tag: slowTts() ? "yavaş" : det && TTS_MODELS[S.tts]?.exp ? "deneysel" : "" });
+  // Gelişmiş · VoxCPM2: "Türkçe aksan modu" anahtarı Türkçe ses satırının altında (aynı pencerede)
+  if (det && S.tts === "vox") rows.push({ tgl: "voxTr", stage: "Türkçe aksan modu", on: !!S.voxTr,
+    model: "daha Türkçe okuyuş",
+    tip: "Deneysel. Açıkken VoxCPM2 İngilizce sesin devamı gibi okumaz: ses yalnız kişinin ses renginden kopyalanır, duygu talimatla verilir; kelime sonlarındaki İngilizce aksan azalır." });
+  // ses işleme (stüdyo miksi): Gelişmiş'te ok ile açılır, içinde üç anahtar · Orta · Güçlü'de hepsi sabit açık
+  if (det) {
+    const n = Object.values(S.mix).filter(Boolean).length;
+    rows.push({ k: "mix", st: "mix", stage: "Ses işleme", tag: "deneysel",
+                model: n === 3 ? "Stüdyo miksi · hepsi açık" : n ? `Stüdyo miksi · ${n} / 3 açık` : "Kapalı" });
+  } else if (pre) rows.push({ st: "mix", stage: "Ses işleme", model: "Stüdyo miksi · hepsi açık" });
   if (pre) rows.forEach((r) => { r.lock = true; });
   return rows;
 }
@@ -801,6 +927,10 @@ function stageTime(st) {
   return `<i class="tm" title="Bu dublajda ${fmtSec(sec)}${pm}">${fmtSec(sec)}</i>`;
 }
 function optList(k) {
+  if (k === "mix") return Object.entries(MIX_FLAGS).map(([f, m]) =>
+    `<label class="mrow tgl sub" title="${esc(m.tip)}"><span class="ms">${m.name}</span><span class="mm"><span><em>${esc(m.note)}</em></span></span>
+       <input type="checkbox" class="tg" data-tgl="mix.${f}"${S.mix[f] ? " checked" : ""}></label>`).join("") +
+    `<div class="mnote">Yapay zekâ değil, dublaj stüdyolarının son işlemesi. Ayrıntı için fareyi bir seçeneğin üstünde tutun.</div>`;
   if (k === "tts") return Object.entries(TTS_MODELS).map(([id, m]) => {
     const pm = perMin(stepInfo(id) ? `tts:${id}:${stepsOf(id)}` : id === "std" ? "tts:ema+antalia" : "tts:" + id);
     const inst = ["vox", "ahenk", "ahenkant"].includes(id) && S.info && !S.info.vox ? " · ilk kullanımda kurulur (~8 GB indirme)" : "";
@@ -811,6 +941,13 @@ function optList(k) {
     Antalia-2 Mini okur. Ahenk modellerinde her
     cümlenin duygusu (kızgın, neşeli, üzgün, sakin, şaşkın, şefkatli, gülerek) İngilizce metinden ve orijinal sesin
     şiddetinden bulunup modele bildirilir.</div>`;
+  if (k === "pe") return Object.entries(PE_MODELS).map(([id, m]) => {
+    const pm = id ? perMin("pe:" + id) : null;
+    return `<button type="button" class="mopt${(S.pe || "") === id ? " on" : ""}" data-pe="${id || "off"}"><span>${m.name}</span>` +
+      `<em>${m.note}${pm != null ? ` · 1 dk ≈ ${Math.round(pm)} sn` : ""}</em></button>`;
+  }).join("") + `<div class="mnote">Çeviriden sonra bir Türkçe dil modeli her cümleyi İngilizce aslına ve önceki cümlelere
+    bakarak düzeltir: anlam, doğal konuşma dili, sen/siz ve ad tutarlılığı, uzunluk. Model ilk seçildiğinde bir kez indirilir.
+    Düzeltilen cümleler altyazı listesinde işaretlenir; düzenleme penceresinde ilk çeviriye dönebilirsiniz.</div>`;
   if (k === "sep") return Object.entries(SEP_MODELS).map(([id, m]) =>
     `<button type="button" class="mopt${S.sep === id ? " on" : ""}${m.rec ? " rec" : ""}${m.slow ? " slow" : ""}" data-sep="${id}"><span>${m.name}</span><em>${m.note}</em></button>`).join("");
   return Object.entries(MT_MODELS).map(([id, m], i) => {
@@ -822,21 +959,42 @@ function optList(k) {
 function drawModels() {
   const box = $("#modelList");
   const open = isAdv() ? box.dataset.open || "" : "";
+  const vf = $("#voxField");
+  $("#modelsField").after(vf);                           // liste yeniden çizilmeden önce dışarı alınır
   box.innerHTML = modelRows().map((r) => {
+    if (r.tgl) return `<label class="mrow tgl sub" title="${esc(r.tip || "")}">
+         <span class="ms">${r.stage}</span><span class="mm"><span><em>${esc(r.model)}</em></span></span>
+         <input type="checkbox" class="tg" data-tgl="${r.tgl}"${r.on ? " checked" : ""}></label>`;
     const name = `<span>${esc(r.model)}${r.tag ? ` <em>${r.tag}</em>` : ""}</span>${stageTime(r.st)}`;
-    if (r.k) return `<button type="button" class="mrow pick${open === r.k ? " open" : ""}" data-k="${r.k}" title="${r.stage} modelini değiştir">
+    if (r.k) return `<button type="button" class="mrow pick${open === r.k ? " open" : ""}" data-k="${r.k}" data-st="${r.st}" title="${r.k === "mix" ? "Ses işleme seçeneklerini göster / gizle" : r.stage + " modelini değiştir"}">
          <span class="ms">${r.stage}</span><span class="mm">${name}</span>
          <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>` + (open === r.k ? `<div class="mopts">${optList(r.k)}</div>` : "");
-    return `<div class="mrow${r.lock ? " lock" : ""}"${r.lock ? ' title="Bu modda sabit"' : ""}><span class="ms">${r.stage}</span><span class="mm">${name}</span>` +
+    return `<div class="mrow${r.lock ? " lock" : ""}" data-st="${r.st}"${r.lock ? ' title="Bu modda sabit"' : ""}><span class="ms">${r.stage}</span><span class="mm">${name}</span>` +
       (r.lock ? `<svg class="lk" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>` : "") + `</div>`;
   }).join("");
+  placeVoxField();
 }
+/* adım sayısı: modeller listesinde Türkçe ses satırının (ve açıksa seçeneklerinin) hemen altında;
+   yalnız adım sayısı seçilebilen bir ses modeli çalışacaksa görünür (drawVoxSteps) */
+function placeVoxField() {
+  const box = $("#modelList"), vf = $("#voxField"), row = box.querySelector('.mrow[data-st="dub"]');
+  if (!row) return;
+  const nx = row.nextElementSibling;
+  (nx && nx.classList.contains("mopts") ? nx : row).after(vf);
+}
+$("#modelList").addEventListener("change", (e) => {
+  const t = e.target.closest("input[data-tgl]"); if (!t) return;
+  if (t.dataset.tgl === "voxTr") { S.voxTr = t.checked; store.set("voxTr", S.voxTr); drawDubPanel(); }
+  else if (t.dataset.tgl.startsWith("mix.")) { const f = t.dataset.tgl.slice(4); S.mix[f] = t.checked; store.set("mix." + f, t.checked); drawDubPanel(); }
+});
 $("#modelList").addEventListener("click", (e) => {
+  if (e.target.closest("label.tgl")) return;                 // anahtar: change olayı işler
   const box = $("#modelList");
   const opt = e.target.closest(".mopt");
   if (opt) {
     if (opt.dataset.sep) { S.sep = opt.dataset.sep; store.set("sep", S.sep); }
     if (opt.dataset.mt) { S.mt = opt.dataset.mt; store.set("mt", S.mt); }
+    if (opt.dataset.pe) { S.pe = opt.dataset.pe === "off" ? "" : opt.dataset.pe; store.set("pe", S.pe); }
     if (opt.dataset.tts) { S.tts = opt.dataset.tts; store.set("tts", S.tts); }
     box.dataset.open = ""; drawDubPanel(); return;
   }
@@ -846,15 +1004,19 @@ $("#modelList").addEventListener("click", (e) => {
 $("#modelsHd").addEventListener("click", () => { if (isAdv()) return; S.modelsOpen = !S.modelsOpen; drawDubPanel(); });
 $("#bufTg").addEventListener("change", (e) => { S.bufOn = e.target.checked; drawDubPanel(); });
 /* parça süresi: 2 · 5 · 10 · 20 dk (Hızlı'da 2, VoxCPM2'li modlarda 5 seçili başlar); her mod kendi seçimini tutar */
-S.lenMode = { hizli: 120, orta: 300, guclu: 300, gelismis: 300 };
-Object.defineProperty(S, "bufLen", { configurable: true, get: () => S.lenMode[S.mode] || 120, set: (v) => { S.lenMode[S.mode] = v; } });
+S.lenMode = { hizli: 120, orta: 300, guclu: 300, gelismis: +store.get("lenAdv", 300) || 300 };
+Object.defineProperty(S, "bufLen", { configurable: true, get: () => S.lenMode[S.mode] || 120,
+  set: (v) => { S.lenMode[S.mode] = v; if (S.mode === "gelismis") store.set("lenAdv", v); } });
 const fmtLen = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
 function drawBufLen() {
   for (const b of $$("#bufLens button")) b.classList.toggle("on", +b.dataset.l === S.bufLen);
 }
 $("#bufLens").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b || !S.bufOn) return; S.bufLen = +b.dataset.l; drawDubPanel(); });
 /* adım sayısı: her ses modeli kendi seçimini tutar (VoxCPM2 standart 10; Ahenk / Ahenk Cep 16) */
-S.stepsBy = Object.fromEntries(Object.entries(STEP_TTS).map(([k, m]) => [k, m.def]));
+S.stepsBy = Object.fromEntries(Object.entries(STEP_TTS).map(([k, m]) => {
+  const v = +store.get("steps." + k, m.def);                  // Gelişmiş: son adım seçimi hatırlanır
+  return [k, m.steps.some(([n]) => n === v) ? v : m.def];
+}));
 const stepsOf = (id) => S.stepsBy[stepKey(id)] ?? stepInfo(id)?.def;
 const voxSteps = () => (isPreset() ? PRESETS[S.mode].steps : S.mode === "hizli" ? HIZLI_STEPS : stepsOf(stepTts()) || 10);
 const bufParams = () => ({ buffering: S.bufOn, chunk_len: S.bufLen, vox_steps: voxSteps() });
@@ -890,6 +1052,8 @@ function drawVoxSteps() {
 /* İngilizce adların okunuşu: iki ayrı anahtar (seçim saklanır) */
 S.pronCmu = store.get("pronCmu", false) === true;
 S.pronG2p = store.get("pronG2p", false) === true;
+S.voxTr = store.get("voxTr", false) === true;
+S.pe = PE_MODELS[store.get("pe", "")] ? store.get("pe", "") : "";
 function drawPron() {
   $("#pronField").hidden = !usesPron();
   $("#pronCmu").checked = !!S.pronCmu;
@@ -897,7 +1061,7 @@ function drawPron() {
 }
 $("#pronCmu").addEventListener("change", (e) => { S.pronCmu = e.target.checked; store.set("pronCmu", S.pronCmu); drawDubPanel(); });
 $("#pronG2p").addEventListener("change", (e) => { S.pronG2p = e.target.checked; store.set("pronG2p", S.pronG2p); drawDubPanel(); });
-$("#voxSteps").addEventListener("click", (e) => { const b = e.target.closest("button"); const id = stepTts(); if (!b || !id || isPreset()) return; S.stepsBy[stepKey(id)] = +b.dataset.s; drawVoxSteps(); drawEta(); });
+$("#voxSteps").addEventListener("click", (e) => { const b = e.target.closest("button"); const id = stepTts(); if (!b || !id || isPreset()) return; S.stepsBy[stepKey(id)] = +b.dataset.s; store.set("steps." + stepKey(id), S.stepsBy[stepKey(id)]); drawVoxSteps(); drawEta(); });
 /* her “Dublajı Başlat / Tekrar Dublajla”da: yuvarlak başlangıç çubuğuna gider, işlem oradan başlar */
 function toRangeStart() {
   S.autoplay = false;
@@ -914,6 +1078,8 @@ const ETA_GUESS = { "sep:uvr": 12.5, "sep:bandit2": 12, "sep:tiger": 32, "asr:wh
   "tts:ahenkcep:4": 2, "tts:ahenkcep:8": 2, "tts:ahenkcep:16": 2.2, "tts:ahenkcep:32": 2.6,
   "tts:ahenk:10": 55, "tts:ahenk:16": 80, "tts:ahenk:20": 95, "tts:ahenk:30": 135,
   "tts:cepant:4": 2, "tts:cepant:8": 2, "tts:cepant:16": 2.1, "tts:cepant:32": 2.4,
+  "pe:petr": 9, "pe:pecos": 11, "mix:studio": 1,
+  "tts:voxtr:5": 45, "tts:voxtr:10": 65, "tts:voxtr:20": 105, "tts:voxtr:30": 145,
   "tts:ahenkant:10": 35, "tts:ahenkant:16": 50, "tts:ahenkant:20": 60, "tts:ahenkant:30": 85 };
 function etaInfo() {
   if (!S.video) return null;
@@ -925,8 +1091,11 @@ function etaInfo() {
   const left = same ? Math.max(0, b - a - (S.status.ready_dur || 0)) : b - a;
   const keys = [statKey("separate", v), statKey("transcribe", v)];
   if (p.det || v === "hizli-oto") keys.push("gender:vgc");
-  if (AHENK.has(ttsOfV(v))) keys.push("emo:jh");
-  keys.push(statKey("translate", v), statKey("dub", v));
+  if (AHENK.has(ttsOfV(v)) || p.aksan) keys.push("emo:jh");
+  keys.push(statKey("translate", v));
+  if (p.pe) keys.push(statKey("refine", v));
+  keys.push(statKey("dub", v));
+  if (p.mix.length) keys.push(statKey("mix", v));
   return { keys, sec: left, running: same && S.status.running };
 }
 function drawEta() {
@@ -955,6 +1124,7 @@ function drawDubPanel() {
   drawModels();
   drawVoxSteps();
   drawPron();
+  drawHist();
   if (isPreset() && !open) $("#voxField").hidden = true;
   const L = S.bufLen;
   $("#lenRow").hidden = false;
@@ -976,30 +1146,71 @@ function drawDubPanel() {
   go.disabled = !S.video || (running && !dirty);
   go.textContent = dirty ? "Dublajı Başlat" : done ? "Tekrar Dublajla" : running ? "Dublaj Sürüyor…" : stopped ? "Devam Et" : "Dublajı Başlat";
   go.dataset.redo = done && !dirty ? "1" : "";
-  hint.textContent = !S.video ? "Önce bir video açın" : dirty ? "Aralık değişti — seçili aralık baştan dublajlanır"
-    : done ? "Aynı ayarlarla yeni bir okuma yapılır" : S.av && S.av !== v ? "Mevcut dublaj bu seçimle değiştirilecek" : "";
+  const ex = $("#goExpBtn"), pend = S.pendingExport && S.pendingExport.v === v;
+  ex.disabled = !S.video || !!S.video?.youtube || !!pend || isHist();
+  ex.textContent = pend ? "Bitince kaydedilecek…" : done && !dirty ? "Dışa Aktar (dublajlı video)" : "Dublajla ve Dışa Aktar";
+  hint.textContent = !S.video ? "Önce bir video açın" : isHist() ? `${labelOf(S.av)} dinleniyor · yeni dublaj “Şimdiki”nin yerine geçer` : dirty ? "Aralık değişti — seçili aralık baştan dublajlanır"
+    : done ? "Aynı ayarlarla yeni bir okuma yapılır" : S.av && S.av !== v ? "Mevcut dublaj bu seçimle değiştirilecek · yapılmış ortak adımlar yeniden yapılmaz" : "";
   $("#dubSummary").textContent = S.av ? labelOf(S.av) : labelOf(v);
   $("#pDub").classList.toggle("done", !!(S.av && isDone() && !dirty));
   drawEta();
 }
-const labelOf = (v) => { const p = parseV(v);
+const labelOf = (v) => {
+  if (String(v || "").startsWith("hist:")) {
+    const h = (S.hist || []).find((x) => "hist:" + x.n === v);
+    return `Ses ${v.slice(5)}` + (h ? " · " + labelOf(h.variant) : "");
+  }
+  const p = parseV(v);
   if (!p.det) return v === "hizli-kadin" ? "Hızlı · Kadın" : v === "hizli-oto" ? "Hızlı · Otomatik" : "Hızlı · Erkek";
   if (p.preset) return `${MODES[p.preset]} · VoxCPM2 ${PRESETS[p.preset].steps} adım`;
   return "Gelişmiş" + (p.sep !== "uvr" ? " · " + (SEP_MODELS[p.sep]?.name.split(" ·")[0] || "") : "") +
     (p.mt !== MT_DEFAULT ? " · " + (MT_MODELS[p.mt]?.name || "") : "") + (p.tts !== "std" ? " · " + TTS_NAME(p.tts) : "") +
-    (p.pron.length ? " · ad okunuşu (" + p.pron.map((f) => PRON_FLAGS[f]).join(" + ") + ")" : ""); };
+    (p.pron.length ? " · ad okunuşu (" + p.pron.map((f) => PRON_FLAGS[f]).join(" + ") + ")" : "") +
+    (p.aksan ? " · Türkçe aksan modu" : "") + (p.pe ? " · iyileştirme: " + PE_MODELS[p.pe].name.split("-")[0] : "") +
+    (p.mix.length ? " · stüdyo miksi (" + p.mix.map((f) => ({ mixm: "ses rengi", mixd: "EQ", mixl: "loudness" }[f])).join(", ") + ")" : ""); };
 $("#modeSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; S.mode = b.dataset.m; store.set("mode", S.mode); drawDubPanel(); });
 $$(".voice").forEach((b) => b.addEventListener("click", () => { S.gender = b.dataset.g; store.set("gender", S.gender); drawDubPanel(); }));
 $("#pDub .ptabs").addEventListener("click", () => $("#pDub").classList.toggle("folded"));
 $("#goBtn").addEventListener("click", () => ($("#goBtn").dataset.redo ? redoDub() : startDub()));
+/* “Dublajla ve Dışa Aktar”: önce kayıt yeri sorulur, dublaj bitince dublajlı video oraya kaydedilir.
+   Video uygulamada da oynatılabilir ama kendiliğinden başlamaz (yalnız “Dublajı Başlat” otomatik oynatır). */
+S.pendingExport = null;
+async function dubAndExport() {
+  if (!S.video) return;
+  if (S.video.youtube) return toast("YouTube videolarında görüntü indirilmediği için video dışa aktarılamaz", true);
+  const v = variant(), base = S.video.name.replace(/\.[^.]+$/, "");
+  let path = null;
+  try { path = await window.pywebview?.api?.save_file(base + EXPORT_NAMES.video, "video"); } catch (e) { console.warn(e); }
+  if (!path) return;
+  S.pendingExport = { v, path, vid: S.video.video_id };
+  const done = S.av === v && S.status?.variant === v && S.status.complete && !rangeDirty();
+  if (done) return runPendingExport();
+  if (S.av === v && S.status?.variant === v && S.status.running && !rangeDirty()) {   // zaten dublajlanıyor: bitince kaydet
+    S.autoplay = false; drawDubPanel(); return toast("Dublaj bitince video kaydedilecek");
+  }
+  await startDub(false);
+  toast("Dublaj bitince video kaydedilecek");
+}
+async function runPendingExport() {
+  const pe = S.pendingExport;
+  if (!pe || !S.video || S.video.video_id !== pe.vid || S.av !== pe.v) return;
+  S.pendingExport = null;
+  const gains = { dub: mix.mute.dub ? 0 : mix.dub / 100, bg: gainOf("bg"), en: 0 };     // dublajlı video: Türkçe ses
+  try {
+    await api("/api/export", { video_id: S.video.video_id, variant: S.av, kind: "video", gains, path: pe.path });
+    pollExport();
+  } catch (e) { toast("Dışa aktarılamadı: " + e.message, true); }
+}
+$("#goExpBtn").addEventListener("click", dubAndExport);
 
 function attach(v, st, force = false) {
   if (S.av !== v || force) { stopAll(); S.chunks.clear(); S.segs = []; S.lastK = -1; S.active = -2; }
   S.av = v; S.status = st; indexStatus(st); S.gate = true; S.skipGate = false;
   renderSubs(); drawRanges(); drawJob(); drawDubPanel(); wantChunks(); tick();
 }
-async function startDub() {
+async function startDub(auto = true) {
   if (!S.video) return;
+  if (auto) S.pendingExport = null;                       // düz “Dublajı Başlat”: bekleyen dışa aktarma iptal
   const v = variant();
   try {
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
@@ -1011,10 +1222,11 @@ async function startDub() {
     attach(v, st, fresh);
     adoptRange(st);
     if (st.range) { vid.currentTime = st.range[0]; drawSeek(st.range[0]); }
-    S.autoplay = true;
+    S.autoplay = auto;
     $("#pDub").classList.add("folded");
+    if (st.complete && S.pendingExport) runPendingExport();
     poll();
-  } catch (e) { toast("Dublaj başlatılamadı: " + e.message, true); }
+  } catch (e) { S.pendingExport = null; toast("Dublaj başlatılamadı: " + e.message, true); }
 }
 async function redoDub() {
   if (!S.video) return;
@@ -1082,6 +1294,42 @@ function drawJob() {
 }
 $("#chunkMap").addEventListener("click", (e) => { const i = e.target.closest("i"); const m = i && cmeta(+i.dataset.k); if (m) vid.currentTime = clampT(m.start + 0.01); });
 
+/* ================= render geçmişi (Gelişmiş): Ses 1, Ses 2 … — orta şeritte; tıklayınca o render çalar ============ */
+S.hist = []; S.liveV = null;
+function isHist() { return String(S.av || "").startsWith("hist:"); }
+async function loadHist() {
+  if (!S.video) return;
+  try { S.hist = (await api(`/api/history/${S.video.video_id}`)).items || []; } catch { S.hist = []; }
+  drawHist();
+}
+function drawHist() {
+  const box = $("#histRail"), show = isAdv() && !!S.video && (S.hist || []).length > 0;
+  box.hidden = !show;
+  if (!show) return;
+  const tm = (t) => new Date(t * 1000).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+  box.innerHTML = `<span class="rh-t" title="Gelişmiş modda her bitmiş dublaj burada saklanır; karşılaştırmak için tıklayın. Uygulama kapanınca silinir.">SES</span>` +
+    S.hist.map((h) => `<button type="button" class="rh${S.av === "hist:" + h.n ? " on" : ""}" data-n="${h.n}"
+       title="Ses ${h.n} · ${esc(labelOf(h.variant))} · ${tm(h.created)}">${h.n}</button>`).join("") +
+    (isHist() ? `<button type="button" class="rh live" data-n="live" title="Şimdiki dublaja dön (düzenleme ve yeni dublaj için)">
+       <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>` : "");
+}
+$("#histRail").addEventListener("click", async (e) => {
+  const b = e.target.closest(".rh"); if (!b || !S.video) return;
+  const t = vid.currentTime, wasPlaying = vid.wantPlay || S.bufPaused;
+  const v = b.dataset.n === "live" ? (S.liveV || variant()) : "hist:" + b.dataset.n;
+  if (v === S.av) return;
+  if (!isHist()) S.liveV = S.av;                                   // şimdiki dublajı hatırla
+  try {
+    const st = await api(`/api/status/${S.video.video_id}?variant=${v}`);
+    attach(v, st, true); poll();                                    // bütün parçaların cümleleri yüklensin
+    vid.currentTime = clampT(t);
+    if (wasPlaying) { S.gate = true; playVideo(); }
+    toast(v.startsWith("hist:") ? `Ses ${v.slice(5)} çalıyor · ${labelOf(st.of)}` : "Şimdiki dublaja dönüldü");
+    if (!v.startsWith("hist:")) S.liveV = null;
+    drawHist();
+  } catch (err) { toast("Ses açılamadı: " + err.message, true); }
+});
+
 async function poll() {
   if (S.polling) return;
   S.polling = true;
@@ -1094,6 +1342,7 @@ async function poll() {
       const prev = S.status; S.status = st; indexStatus(st);
       const key = (x) => x ? x.chunks.map((c) => c.i + c.state + c.end + (c.done ? "d" : "")).join(",") + x.complete : "";
       if (!prev || key(prev) !== key(st)) {
+        if (st.complete && S.pendingExport) runPendingExport();
         if (prev && !prev.complete && st.complete) {
           loadStats().then(() => drawModels());
           toast(st.buffering ? "Dublajın tamamı hazır" : "Dublaj hazır — artık dublajlı izleyebilirsiniz");
@@ -1103,6 +1352,7 @@ async function poll() {
         drawRanges(); wantChunks(); renderSubs();
       }
       drawJob(); drawDubPanel(); status();
+      if (st.hist != null && st.hist !== (S.hist || []).length) loadHist();
       if (!st.running) break;
       await sleep(1000);
     }
@@ -1135,6 +1385,7 @@ async function setVideo(v) {
   $("#playBtn").disabled = false; $("#tDur").textContent = fmt(v.duration);
   S.range = null; drawRange();
   $("#pDub").classList.remove("folded");
+  S.hist = []; S.liveV = null; drawHist();
   renderSubs(); drawJob(); drawDubPanel(); status(); drawRanges();
 }
 async function openPath(path) {
@@ -1281,8 +1532,8 @@ const VOICE_MODELS = [
 })();
 function showAbout() {
   showModal("Hakkında", `<div class="about">
-    <div class="ahead"><b>"Doğru mu Samet?"</b><span>Sürüm ${esc(S.info?.version || "")} · İngilizce → Türkçe video dublaj</span></div>
-    <p>"Doğru mu Samet?", İngilizce videoları Türkçe dublajla izleyebilmek için hazırlanmış, <b>hobi amaçlı ve deneysel</b>
+    <div class="ahead"><b>SlateVox</b><span>Sürüm ${esc(S.info?.version || "")} · İngilizce → Türkçe video dublaj</span></div>
+    <p>SlateVox, İngilizce videoları Türkçe dublajla izleyebilmek için hazırlanmış, <b>hobi amaçlı ve deneysel</b>
       bir projedir. Bütün yapay zekâ modelleri kendi bilgisayarınızda çalışır; videolarınız hiçbir sunucuya gönderilmez.</p>
     <h4>Ticari değildir</h4>
     <p>Program kişisel kullanım için yapıldı. <b>Ücretsizdir ve hiçbir zaman ücretli olmayacak.</b> Ticari kullanım için
@@ -1437,12 +1688,15 @@ const KNOWN_MODELS = {
   gender: [["gender:vgc", "Voice Gender Classifier"]],
   emotion: [["emo:jh", "Emotion DistilRoBERTa + ses şiddeti"]],
   translate: Object.entries(MT_MODELS).map(([k, m]) => ["mt:" + k, m.name]),
+  refine: Object.entries(PE_MODELS).filter(([k]) => k).map(([k, m]) => ["pe:" + k, m.name]),
+  mix: [["mix:studio", "Stüdyo miksi (ses rengi, yankı, EQ, loudness)"]],
   dub: [["tts:ema", "EMA Lightning"], ["tts:antalia", "Antalia-2 Mini"], ["tts:ema+antalia", "EMA Lightning + Antalia-2 Mini"],
-        ["tts:vox:4", "VoxCPM2 · 4 adım"], ...TTS_IDS.filter((id) => stepInfo(id)).flatMap((id) =>
+        ["tts:vox:4", "VoxCPM2 · 4 adım"], ...STEP_TTS.vox.steps.map(([n]) => [`tts:voxtr:${n}`, `VoxCPM2 · Türkçe aksan modu · ${n} adım`]), ...TTS_IDS.filter((id) => stepInfo(id)).flatMap((id) =>
           stepInfo(id).steps.map(([n]) => [`tts:${id}:${n}`, `${TTS_MODELS[id].name} · ${n} adım`]))],
 };
 const STAGE_TITLES = [["separate", "Ses ayırma"], ["transcribe", "İngilizce metin"], ["gender", "Kadın / erkek ayırma"],
-                      ["emotion", "Duygu algılama"], ["translate", "Türkçe çeviri"], ["dub", "Türkçe ses"]];
+                      ["emotion", "Duygu algılama"], ["translate", "Türkçe çeviri"], ["refine", "Çeviri iyileştirme"],
+                      ["dub", "Türkçe ses"], ["mix", "Ses işleme"]];
 async function loadStats() { try { S.stats = await api("/api/stats"); } catch { /* sunucu yoksa boş */ } return S.stats; }
 async function showModels() {
   const st = (await loadStats()) || { models: [] };
@@ -1469,11 +1723,12 @@ $("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") $("#
 const EXPORT_NAMES = { video: "_dublaj.mp4", dub: "_dublaj_ses.wav", en: "_ingilizce_ses.wav", bg: "_arkaplan_ses.wav", all: "_tum_sesler.wav" };
 async function exportAs(kind) {
   if (!S.video) return toast("Önce bir video açın", true);
+  if (isHist()) return toast("Geçmişteki bir ses dışa aktarılamaz; önce “Şimdiki” sese dönün", true);
   if (!S.av) return toast("Önce dublajı başlatın", true);
   const st = S.status, needDub = ["video", "dub", "all"].includes(kind);
   if (needDub && st && !st.complete) return toast(`Dublaj henüz bitmedi (%${pct(st)} hazır)`, true);
   const gains = {};
-  for (const ch of ["dub", "bg", "en"]) gains[ch] = mix.mute[ch] ? 0 : (mix[ch] ?? 100) / 100;
+  for (const ch of ["dub", "bg", "en"]) gains[ch] = gainOf(ch);
   const base = S.video.name.replace(/\.[^.]+$/, "");
   let path = null;
   try { path = await window.pywebview?.api?.save_file(base + EXPORT_NAMES[kind], kind); } catch (e) { console.warn(e); }

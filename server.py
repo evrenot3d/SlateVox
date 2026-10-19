@@ -47,7 +47,7 @@ LINKS = re.compile(r"^(https://(www\.)?(instagram\.com|github\.com|huggingface\.
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    server_version = "DogruMuSamet"
+    server_version = "SlateVox"
 
     def log_message(self, *a):
         pass
@@ -121,6 +121,8 @@ class Handler(BaseHTTPRequestHandler):
             if p.startswith("/api/chunk/"):
                 _, _, _, vid, k = p.split("/")
                 return self._json(manager().chunk_info(vid, q.get("variant", ["hizli-kadin"])[0], int(k)))
+            if p.startswith("/api/history/"):
+                return self._json(manager().history(p.rsplit("/", 1)[1]))
             if p == "/api/open_url_status":
                 return self._json({"ok": True, **youtube().state})
             if p.startswith("/api/yt_stream/"):
@@ -145,7 +147,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._file(v.path)
             if p.startswith("/media/"):
                 parts = p.split("/")            # /media/<vid>/<cXXX>/<file>
-                if len(parts) == 5 and re.fullmatch(r"[0-9a-f]{16}", parts[2]) and re.fullmatch(r"c\d{3}", parts[3]) \
+                if len(parts) == 5 and re.fullmatch(r"[0-9a-f]{16}", parts[2]) and re.fullmatch(r"(?:h\d{2}-)?c\d{3}", parts[3]) \
                         and re.fullmatch(r"[\w.~-]+\.wav", parts[4]):
                     return self._file(E.WORK / parts[2] / parts[3] / parts[4], cache="max-age=3600")
                 return self._json({"error": "bulunamadı"}, 404)
@@ -211,6 +213,9 @@ class Handler(BaseHTTPRequestHandler):
                 b = self._body()
                 manager().export(b["video_id"], b["variant"], b["kind"], b.get("gains") or {}, b["path"])
                 return self._json({"ok": True, **manager().export_state})
+            if p == "/api/resay":                    # altyazı listesinden bir cümleyi düzenleyip yeniden seslendirme
+                b = self._body()
+                return self._json(manager().resay(b["video_id"], b["variant"], int(b["k"]), int(b["j"]), b))
             if p == "/api/focus":
                 b = self._body()
                 manager().set_focus(b["video_id"], b["variant"], float(b.get("t", 0)))
@@ -257,5 +262,5 @@ def make_server(port: int) -> Server:
 if __name__ == "__main__":
     port = int(os.environ.get("DMS_PORT", "7860"))
     srv = make_server(port)
-    print(f"Doğru mu Samet → http://127.0.0.1:{port}", flush=True)
+    print(f"SlateVox → http://127.0.0.1:{port}", flush=True)
     srv.serve_forever()

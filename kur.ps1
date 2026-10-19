@@ -1,4 +1,4 @@
-﻿# Doğru mu Samet - Windows kurulum + model indirme + başlatma (masaüstü)
+﻿# SlateVox - Windows kurulum + model indirme + başlatma (masaüstü)
 # Her adım kurulum.log dosyasına yazılır. Tekrar çalıştırılırsa kurulu olanları atlar.
 param([switch]$BaslatmaYok)
 $ErrorActionPreference = "Continue"
@@ -35,7 +35,7 @@ function Fail([string]$m) {
     exit 1
 }
 
-Say "Dogru mu Samet kurulumu basladi"
+Say "SlateVox kurulumu basladi"
 
 # ---------- 1) Python 3.11-3.13
 function Find-Python {

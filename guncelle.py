@@ -31,7 +31,7 @@ CONF = E.BASE / "guncelleme.json"
 BACKUP = E.BASE / "yedek"
 PROTECT_DIRS = {"modeller", "calisma", "yedek", "python", ".venv", ".venv-vox", ".venv-vf", ".git", "__pycache__", "_test"}
 PROTECT_RE = re.compile(r"(\.log$|^model_hizlari.*\.json$)", re.I)
-UA = {"User-Agent": "dogru-mu-samet-guncelleme", "Accept": "application/vnd.github+json"}
+UA = {"User-Agent": "slatevox-guncelleme", "Accept": "application/vnd.github+json"}
 
 
 def _ver(s: str) -> tuple:

@@ -52,12 +52,36 @@ TTS_KEYS = {"vox": "VoxCPM2", "ema": "EMA Lightning", "antalia": "Antalia-2 Mini
             "ahenk": "Ahenk", "cepant": "Ahenk Cep + Antalia-2 Mini", "ahenkant": "Ahenk + Antalia-2 Mini"}
 AHENK_TTS = {"ahenkcep", "ahenk", "cepant", "ahenkant"}   # algılanan duyguyla okur
 TTS_VOICE = {"ema": "kadin", "antalia": "erkek"}   # tek sesli hazır modeller (engine.dub'daki ses adı)
-STEP_DEFAULT = {"vox": E.VOX_STEPS, **{t: E.AHENK_STEPS for t in AHENK_TTS}}
+STEP_DEFAULT = {"vox": E.VOX_STEPS, "voxtr": E.VOX_STEPS, **{t: E.AHENK_STEPS for t in AHENK_TTS}}
 # Hızlı: Kadın = Ahenk Cep, Otomatik = Ahenk Cep (kadın) + Antalia (erkek), Erkek = Antalia; Ahenk Cep 16 adım sabit
 HIZLI_TTS = {"hizli-kadin": "ahenkcep", "hizli-oto": "cepant", "hizli-erkek": "antalia"}
 # Çeviride kalan İngilizce adlar Türkçe okunuşla yazılır (telaffuz.py): Hızlı · Orta · Güçlü'de ikisi her zaman açık;
 # Gelişmiş'te VoxCPM2 dışındaki seslerde iki ayrı anahtar (varyant ekleri ~cmu, ~g2p)
 PRON_FLAGS = {"cmu": "CMU sözlüğü", "g2p": "yapay zekâ tahmini"}
+# Gelişmiş · VoxCPM2: "Türkçe aksan modu" (varyant eki ~aksan) — İngilizce devam ettirme yerine yalnız ses rengi örneği
+# + algılanan duygu talimatı; kelime sonlarındaki hafif İngilizce aksanı azaltmak için (engine.vox_accent_text)
+VOX_FLAGS = {"aksan": "Türkçe aksan modu"}
+# Gelişmiş · çeviri iyileştirme: makine çevirisini bağlama bakarak düzelten dil modeli (varyant eki ~petr / ~pecos)
+PE_KEYS = set(E.PE_MODELS)
+# Gelişmiş · ses işleme (stüdyo miksi; ses_isleme.py): ~mixm ses rengi + yankı · ~mixd de-esser/EQ/kompresör ·
+# ~mixl loudness. İşlenmemiş dublaj ayrı dosyada kalır (anahtar değişince yeniden seslendirilmez)
+MIX_FLAGS = {"mixm": "Ses rengi eşleme + ortam yankısı", "mixd": "De-esser, EQ ve kompresör", "mixl": "Loudness standardı"}
+
+
+def mix_of(variant: str) -> list:
+    """açık ses işleme adımları: Gelişmiş'te seçilenler, Orta · Güçlü'de hepsi (sabit)"""
+    opts = variant.split("~")[1:]
+    if "nomix" in opts:                              # strip_mix'in iç işareti: işlenmemiş dublaj
+        return []
+    if any(o in ("orta", "guclu") for o in opts):
+        return list(MIX_FLAGS)
+    return [f for f in MIX_FLAGS if f in opts]
+
+
+def strip_mix(variant: str) -> str:
+    """aynı ayarların ses işlemesiz hâli (işlenmemiş dublaj dosyası bunun adını taşır; yalnız dosya adı için)"""
+    rest = [o for o in variant.split("~") if o not in MIX_FLAGS]
+    return "~".join(rest + (["nomix"] if any(o in ("orta", "guclu") for o in rest[1:]) else []))
 # Hazır modlar (ayarları kilitli): UVR + MiLMMT + VoxCPM2, sabit adım sayısıyla. Varyant: "detayli~vox~orta"
 PRESETS = {"orta": 10, "guclu": 20}
 
@@ -87,8 +111,32 @@ def dub_tts(variant: str) -> str:
     return HIZLI_TTS.get(variant.split("~")[0]) or tts_of(variant)
 
 
+PRESET_PE = "pecos"                      # Güçlü: çeviri iyileştirme sabit (Cosmos Turkish-Gemma-9B-T1); Orta'da yok
+
+
+def pe_of(variant: str):
+    """çeviri iyileştirme modeli: Gelişmiş'te seçilen, Güçlü'de sabit Cosmos (Orta'da yok), değilse None"""
+    if preset_of(variant):
+        return PRESET_PE if preset_of(variant) == "guclu" else None
+    return next((o for o in variant.split("~")[1:] if o in PE_KEYS), None)
+
+
+def tr_list(trj: dict, variant: str) -> tuple:
+    """(gösterilen / seslendirilen Türkçe, ilk çeviri): iyileştirme açıksa ve yapıldıysa onun sonucu"""
+    tr0 = list((trj or {}).get("tr", []))
+    pe = pe_of(variant)
+    got = ((trj or {}).get("pe") or {}).get(pe) if pe else None
+    return (list(got) if got and len(got) == len(tr0) else tr0), tr0
+
+
+def vox_accent(variant: str) -> bool:
+    """Türkçe aksan modu: Gelişmiş'te anahtar, Orta · Güçlü'de (VoxCPM2) her zaman açık"""
+    return "aksan" in variant.split("~")[1:] or bool(preset_of(variant))
+
+
 def uses_emotion(variant: str) -> bool:
-    return dub_tts(variant) in AHENK_TTS
+    """Duygu Algılama aşaması: Ahenk'li sesler ve VoxCPM2'nin Türkçe aksan modu (duygu talimatla verilir)"""
+    return dub_tts(variant) in AHENK_TTS or vox_accent(variant)
 
 
 def fixed_steps(variant: str):
@@ -104,7 +152,12 @@ def valid_variant(variant: str) -> bool:
     pre = [o for o in opts if o in PRESETS]
     pron = [o for o in opts if o in PRON_FLAGS]
     return (base in BASES and len(opts) == len(set(opts))
-            and all(o in E.MT_MODELS or o in TTS_KEYS or o in PRESETS or o in PRON_FLAGS for o in opts)
+            and all(o in E.MT_MODELS or o in TTS_KEYS or o in PRESETS or o in PRON_FLAGS or o in VOX_FLAGS
+                    or o in PE_KEYS or o in MIX_FLAGS for o in opts)
+            and (not any(o in MIX_FLAGS for o in opts) or (base.startswith("detayli") and not pre))
+            and sum(o in PE_KEYS for o in opts) <= 1
+            and (not any(o in PE_KEYS for o in opts) or (base.startswith("detayli") and not pre))
+            and (not any(o in VOX_FLAGS for o in opts) or (base.startswith("detayli") and tts == "vox" and not pre))
             and sum(o in TTS_KEYS for o in opts) <= 1
             and (not pron or (base.startswith("detayli") and tts != "vox" and not pre))
             and (base.startswith("detayli") or (mt == E.MT_DEFAULT and tts == "std"))
@@ -172,7 +225,10 @@ def fname_dub(variant: str, base: str) -> str:
     """ayırmaya, çeviri modeline, ses modeline ve telaffuz seçeneklerine bağlı dosya (dublaj)"""
     stem, ext = base.rsplit(".", 1)
     t, pre = tts_of(variant), preset_of(variant)
-    pr = "".join("~" + f for f in pron_flags(variant))
+    opts = variant.split("~")[1:]
+    pr = "".join("~" + f for f in pron_flags(variant)) + ("~aksan" if "aksan" in opts else "")
+    pr += "".join("~" + o for o in opts if o in PE_KEYS)
+    pr += "".join("~" + f for f in mix_of(variant))
     return f"{stem}{sfx(variant)}{mtsfx(variant)}{'' if t == 'std' else '~' + t}{'~' + pre if pre else ''}{pr}.{ext}"
 
 
@@ -185,9 +241,29 @@ def stages_for(variant: str) -> list:
     if uses_emotion(variant):
         st.append(("emotion", "Duygu Algılama"))
     mt = mt_of(variant)
-    st += [("translate", "Türkçe Çeviri" + (f" ({E.MT_MODELS[mt]['name']})" if mt != E.MT_DEFAULT else "")),
-           ("dub", "Türkçe Dublaj" + (f" ({TTS_KEYS[t]})" if t in TTS_KEYS else ""))]
+    st.append(("translate", "Türkçe Çeviri" + (f" ({E.MT_MODELS[mt]['name']})" if mt != E.MT_DEFAULT else "")))
+    if pe_of(variant):
+        st.append(("refine", f"Çeviri İyileştirme ({E.PE_MODELS[pe_of(variant)]['name']})"))
+    st.append(("dub", "Türkçe Dublaj" + (f" ({TTS_KEYS[t]})" if t in TTS_KEYS else "")))
+    if mix_of(variant):
+        st.append(("mix", "Ses İşleme (stüdyo miksi)"))
     return st
+
+
+def stage_sig(stage: str, variant: str):
+    """İşleyiş ağacı: aşamanın sonucunu belirleyen seçimler. İki ayarda imza aynıysa o aşamanın çıktısı ortaktır
+    (ayar değişince yeniden yapılmaz; o anda çalışıyorsa yarıda kesilmez, bitirilip yeni ayara devredilir)."""
+    if stage in ("separate", "transcribe", "gender", "emotion"):
+        return (stage, sep_of(variant))                       # ayırmaya bağlı (ses, İngilizce metin, kadın/erkek, duygu)
+    if stage == "translate":
+        return (stage, sep_of(variant), mt_of(variant))
+    if stage == "refine":
+        return (stage, sep_of(variant), mt_of(variant), pe_of(variant))
+    if stage == "dub":
+        return (stage, dub_file(strip_mix(variant)))           # dosya adı ses modelini, okunuşu, aksanı… taşır
+    if stage == "mix":
+        return (stage, dub_file(variant))
+    return (stage, variant)
 
 
 def _rmtree_later(path: Path, tries: int = 20) -> None:
@@ -244,7 +320,8 @@ def build_sentences(words: list) -> list:
 # ------------------------------------------------------------------ model hızları (kalıcı)
 STATS_FILE = E.BASE / ("model_hizlari_demo.json" if E.DEMO else "model_hizlari.json")
 STAGE_GROUPS = [("separate", "Ses ayırma"), ("transcribe", "İngilizce metin"), ("gender", "Kadın / erkek ayırma"),
-                ("emotion", "Duygu algılama"), ("translate", "Türkçe çeviri"), ("dub", "Türkçe ses")]
+                ("emotion", "Duygu algılama"), ("translate", "Türkçe çeviri"), ("refine", "Çeviri iyileştirme"),
+                ("dub", "Türkçe ses"), ("mix", "Ses işleme")]
 SEP_NAMES = {"uvr": "UVR-MDX-NET Voc FT", "bandit2": "BandIt v2 · DnR Multi", "tiger": "TIGER-DnR"}
 
 
@@ -262,8 +339,15 @@ def stage_model(stage: str, variant: str) -> tuple:
     if stage == "translate":
         mt = mt_of(variant)
         return "mt:" + mt, E.MT_MODELS[mt]["name"]
+    if stage == "refine":
+        pe = pe_of(variant)
+        return "pe:" + pe, E.PE_MODELS[pe]["name"]
+    if stage == "mix":
+        return "mix:studio", "Stüdyo miksi (ses rengi, yankı, EQ, loudness)"
     if stage == "dub":
         t = dub_tts(variant)
+        if t == "vox" and vox_accent(variant):
+            return "tts:voxtr", "VoxCPM2 · Türkçe aksan modu"
         if t in TTS_KEYS:
             return "tts:" + t, TTS_KEYS[t]
         return "tts:ema+antalia", "EMA Lightning + Antalia-2 Mini"
@@ -329,6 +413,7 @@ class Video:
         self.next_id = 0
         self.lock = threading.Lock()
         self.range = (0.0, self.duration)  # son kullanılan işlem aralığı (cümle sınırına oturtulmuş)
+        self.hist: list[dict] = []         # Gelişmiş render geçmişi (Ses 1, Ses 2 ...); uygulama kapanınca silinir
         save_json(self.dir / "meta.json", {"name": name, "path": str(path), "duration": self.duration})
 
     def sorted(self) -> list:
@@ -429,6 +514,8 @@ class Job:
         self.timing = {}             # aşama → bu dublajda harcanan sn (önbellekten gelenler hariç)
         self.timing_video = {}       # aşama → işlenen video sn
         self.range = (0.0, video.duration)
+        self.snapped = False         # Gelişmiş: bittiğinde render geçmişine kaydedildi mi
+        self.carry_to = None         # ayar değişince yerine başlayan iş (ortak aşama yarıda kesilmez, ona devredilir)
 
     def next_len(self) -> float:
         return float(self.chunk_len) if self.buffering else NOBUF_LEN
@@ -442,6 +529,7 @@ class Manager:
         self.job: Job | None = None
         self.cv = threading.Condition()
         self.export_state = {"running": False}
+        self.hist_lock = threading.Lock()
         for p in E.WORK.iterdir():               # önceki oturumların kayıtları: her açılış sıfırdan
             if p.name not in KEEP:
                 if p.is_dir():
@@ -521,8 +609,11 @@ class Manager:
             if fresh:
                 self._reset_chunks(v)
             if not same:
+                prev = self.job
                 old = self.job if self.job and self.job.video.id == vid and self.job.variant == variant else None
                 self.job = Job(v, variant, buffering)
+                if prev and prev.video.id == vid and not fresh and not prev.stopped:
+                    prev.carry_to = self.job      # o an çalışan ortak aşama bitirilir (sıfırdan başlamasın)
                 if old:                           # durdurup devam: ölçülen hız korunur
                     self.job.seed, self.job.chunk_len, self.job.vox_steps = old.seed, old.chunk_len, old.vox_steps
                     if not fresh:                 # durdurup devam: süreler birikmeye devam eder
@@ -536,19 +627,29 @@ class Manager:
                 self.job.vox_steps = fixed_steps(variant)
             self._apply(self.job, v, variant, rng)
             if not self.job.buffering:
-                self._single_unit(v, variant)
+                self._single_unit(v, variant, prev if not same else None)
             self.job.focus = focus
             self.job.error = None
             self.cv.notify_all()
             return self.job
 
-    def _single_unit(self, v: Video, variant: str) -> None:
+    def _useful(self, v: Video, k: int, variant: str, prev=None) -> bool:
+        """Parçada bu ayarın kullanabileceği önceki iş var mı (aynı ayırmanın sesi ya da devredilen çalışan aşama)."""
+        d = v.dir / f"c{k:03d}"
+        if (d / fname(variant, "vocals.wav")).exists() and (d / fname(variant, "inst.wav")).exists():
+            return True
+        cur = prev.current if prev else None
+        return bool(cur and cur["chunk"] == k and stage_sig(cur["stage"], prev.variant) == stage_sig(cur["stage"], variant))
+
+    def _single_unit(self, v: Video, variant: str, prev=None) -> None:
         """Buffering kapalı: aralığın bu modda bitmemiş kısmı TEK PARÇA işlensin. Önceki çalışmalardan (buffering açıkken
-        ya da başka bir modelle) kalan parça planı videoya bağlı olduğu için yeniden kullanılırsa iş parça parça
-        yürüyordu. Bitmemiş parçalar atılır, boşluk _plan_next'te tek parça olarak planlanır (bitmiş parçalar kalır)."""
+        ya da başka bir modelle) kalan ve İŞE YARAMAYAN parçalar atılır, boşluk _plan_next'te tek parça olarak planlanır.
+        İşleyiş ağacı: aynı ses ayırmanın çıktısını taşıyan parçalar kalır; ses ayırma, İngilizce metin, kadın/erkek,
+        duygu, çeviri gibi bu ayarla ortak aşamalar yeniden yapılmaz, yalnız değişen aşamalar çalışır."""
         ra, rb = self.job.range
         with v.lock:
-            drop = [c for c in v.chunks if c["end"] > ra and c["start"] < rb and not chunk_done(v, c["i"], variant)]
+            drop = [c for c in v.chunks if c["end"] > ra and c["start"] < rb and not chunk_done(v, c["i"], variant)
+                    and not self._useful(v, c["i"], variant, prev)]
             if not drop:
                 return
             v.chunks = [c for c in v.chunks if c not in drop]
@@ -579,11 +680,12 @@ class Manager:
             old = self.job
             if self.job:
                 self.job.cancel = True
-            raw = dub_file(variant)
+            names = {dub_file(variant), dub_file(strip_mix(variant))}
             for c in v.sorted():
                 d = v.dir / f"c{c['i']:03d}"
-                for f in (raw, raw[:-4] + ".json"):
-                    (d / f).unlink(missing_ok=True)
+                for raw in names:
+                    for f in (raw, raw[:-4] + ".json"):
+                        (d / f).unlink(missing_ok=True)
             self.job = Job(v, variant, buffering)
             if old and old.video.id == vid and old.variant == variant:
                 self.job.chunk_len, self.job.vox_steps = old.chunk_len, old.vox_steps
@@ -613,8 +715,63 @@ class Manager:
                 self.job.focus = float(t)
                 self.cv.notify_all()
 
+    # ---- render geçmişi (Gelişmiş): her bitmiş dublaj "Ses N" olarak saklanır, karşılaştırmak için geri çalınabilir
+    def _hist_entry(self, v: Video, variant: str) -> dict:
+        try:
+            n = int(variant.split(":", 1)[1])
+            return next(h for h in v.hist if h["n"] == n)
+        except (ValueError, IndexError, StopIteration):
+            raise KeyError(variant)
+
+    def _snapshot(self, job: Job) -> None:
+        """Bitmiş dublajın parçalarını v.dir/hNN-cKKK altına sabit bağlantıyla (yer kaplamaz; os.replace ile yazılan
+        yeni dosyalar eski bağlantıyı bozmaz) ya da kopyayla saklar; parça bilgisi (cümleler, zamanlar) da kaydedilir."""
+        v, variant = job.video, job.variant
+        ra, rb = job.range
+        n = (v.hist[-1]["n"] + 1) if v.hist else 1
+        chunks = []
+        for c in v.sorted():
+            if c["end"] <= ra or c["start"] >= rb or not chunk_ready(v, c["i"], variant):
+                continue
+            k = c["i"]
+            d = v.dir / f"c{k:03d}"
+            hd = v.dir / f"h{n:02d}-c{k:03d}"
+            hd.mkdir(exist_ok=True)
+            for name in (dub_file(variant), fname(variant, "inst.wav"), fname(variant, "vocals.wav")):
+                src, dst = d / name, hd / name
+                if not src.exists() or dst.exists():
+                    continue
+                try:
+                    os.link(src, dst)
+                except OSError:
+                    shutil.copy2(src, dst)
+            info = self.chunk_info(v.id, variant, k)
+            base = f"/media/{v.id}/{hd.name}/"
+            info["audio"] = {key: base + url.split("/")[-1].split("?")[0] for key, url in info["audio"].items()}
+            info["audio"]["dub"] += f"?h={n}"
+            chunks.append({"i": k, "start": c["start"], "end": c["end"], "info": info})
+        if chunks:
+            v.hist.append({"n": n, "variant": variant, "created": time.time(), "range": [ra, rb], "chunks": chunks})
+
+    def history(self, vid: str) -> dict:
+        v = self.get(vid)
+        return {"ok": True, "items": [{"n": h["n"], "variant": h["variant"], "created": h["created"], "range": h["range"]}
+                                      for h in v.hist]}
+
+    def _hist_status(self, v: Video, variant: str) -> dict:
+        h = self._hist_entry(v, variant)
+        chunks = [{"i": c["i"], "start": c["start"], "end": c["end"], "state": "hazir", "done": True} for c in h["chunks"]]
+        return {"ok": True, "video_id": v.id, "variant": variant, "duration": v.duration, "chunks": chunks,
+                "ready": len(chunks), "total": len(chunks),
+                "ready_dur": round(sum(c["end"] - c["start"] for c in chunks), 2), "complete": True,
+                "running": False, "stopped": False, "buffering": True, "chunk_len": CHUNK_LEN, "timing": {},
+                "timing_video": {}, "current": None, "error": None, "range": h["range"], "stages": [],
+                "hist": len(v.hist), "of": h["variant"]}
+
     def status(self, vid: str, variant: str) -> dict:
         v = self.get(vid)
+        if variant.startswith("hist:"):
+            return self._hist_status(v, variant)
         j = self.job if (self.job and self.job.video.id == vid and self.job.variant == variant) else None
         job = j if j and not j.cancel else None
         ra, rb = (j.range if j else v.range)
@@ -651,11 +808,26 @@ class Manager:
             "current": cur, "error": job.error if job else None,
             "range": [ra, rb],
             "stages": [{"key": k, "name": n} for k, n in stages_for(variant)],
+            "hist": self._maybe_snapshot(j, complete),
         }
+
+    def _maybe_snapshot(self, j, complete: bool) -> int:
+        """Gelişmiş dublaj bittiği an (ilk "tamam" durumunda) geçmişe kaydedilir; geçmişteki kayıt sayısını döner."""
+        if j and complete and not j.snapped and not j.cancel and is_det(j.variant) and not preset_of(j.variant):
+            with self.hist_lock:
+                if not j.snapped:
+                    j.snapped = True
+                    try:
+                        self._snapshot(j)
+                    except Exception:  # noqa: BLE001 — geçmiş kaydı olmazsa dublaj yine çalışır
+                        traceback.print_exc()
+        return len(j.video.hist) if j else 0
 
     def speakers(self, vid: str, variant: str) -> dict:
         """Videodaki kişiler: tüm cümlelerin ses izleri birlikte kümelenir (kadın / erkek en çok 10'ar kişi)."""
         v = self.get(vid)
+        if variant.startswith("hist:"):
+            variant = self._hist_entry(v, variant)["variant"]
         ra, rb = v.range
         chunks = [c for c in v.sorted() if c["end"] > ra and c["start"] < rb and chunk_ready(v, c["i"], variant)]
         key = (variant, tuple((c["i"], c["start"], c["end"]) for c in chunks))
@@ -681,13 +853,17 @@ class Manager:
 
     def chunk_info(self, vid: str, variant: str, k: int) -> dict:
         v = self.get(vid)
+        if variant.startswith("hist:"):
+            h = self._hist_entry(v, variant)
+            got = next((c["info"] for c in h["chunks"] if c["i"] == k), None)
+            return got or {"ok": False}
         if not chunk_ready(v, k, variant):
             return {"ok": False}
         c = v.by_id(k)
         d = v.dir / f"c{k:03d}"
         a, b = c["start"], c["end"]
         asr = load_json(d / fname(variant, "asr.json"), {}) or {}
-        tr = (load_json(d / fname_mt(variant, "tr.json"), {}) or {}).get("tr", [])
+        tr, tr0 = tr_list(load_json(d / fname_mt(variant, "tr.json"), {}) or {}, variant)
         raw = dub_file(variant)
         dj = load_json(d / (raw[:-4] + ".json"), {}) or {}
         voices, timings, emos = dj.get("voices", []), dj.get("timings", []), dj.get("emotions", [])
@@ -699,11 +875,182 @@ class Manager:
                          "tr": tr[i] if i < len(tr) else "", "g": voices[i] if i < len(voices) else None,
                          "ds": round(a + t[0], 3) if t else None, "de": round(a + t[1], 3) if t else None,
                          **({"emo": emos[i]} if i < len(emos) else {}),
-                         **({"pron": prons[i]} if i < len(prons) and prons[i] else {})})
+                         **({"pron": prons[i]} if i < len(prons) and prons[i] else {}),
+                         **({"tr0": tr0[i]} if i < len(tr0) and i < len(tr) and tr0[i] != tr[i] else {})})
         base = f"/media/{vid}/c{k:03d}/"
-        audio = {"dub": f"{base}{raw}?v={int((d / raw).stat().st_mtime)}", "bg": f"{base}{fname(variant, 'inst.wav')}",
+        audio = {"dub": f"{base}{raw}?v={(d / raw).stat().st_mtime_ns}", "bg": f"{base}{fname(variant, 'inst.wav')}",
                  "en": f"{base}{fname(variant, 'vocals.wav')}"}
+        edits = dj.get("edits", {})
+        for i, s in enumerate(segs):
+            if str(i) in edits:
+                s["edit"] = edits[str(i)]
         return {"ok": True, "i": k, "start": a, "end": b, "segments": segs, "audio": audio}
+
+    @staticmethod
+    def _apply_mix(d: Path, variant: str, voc_f: Path) -> None:
+        """İşlenmemiş dublajdan stüdyo miksli dublajı üretir (dosya + aynı zaman bilgisi)."""
+        import ses_isleme
+        raw, final = dub_file(strip_mix(variant)), dub_file(variant)
+        x, sr = E.read_wav(d / raw)
+        x = x.mean(axis=1) if x.ndim > 1 else x
+        if sr != E.DUB_SR:
+            x = E.resample(x, sr, E.DUB_SR)
+        ref, rsr = E.read_wav(voc_f)
+        y = ses_isleme.process(x, ref, rsr, mix_of(variant), d / "_mix")
+        shutil.rmtree(d / "_mix", ignore_errors=True)
+        E.write_wav(d / final, y, E.DUB_SR)
+        save_json(d / (final[:-4] + ".json"), load_json(d / (raw[:-4] + ".json"), {}) or {})
+
+    # ---- tek cümleyi düzenleyip yeniden seslendirme (altyazı listesindeki "düzenle")
+    def resay(self, vid: str, variant: str, k: int, j: int, opts: dict) -> dict:
+        """Parça k'nın j. cümlesi: Türkçe metin, okunuş, duygu, ses (kadın/erkek), hız ve okuma tohumu değiştirilip
+        yalnız o cümle aynı ses modeliyle yeniden okunur ve parçanın dublaj sesine yerleştirilir. Ses gücü eski
+        okumaya eşlenir. Çeviri dosyası da güncellenir (aynı çeviriyi kullanan diğer sesler de yeni metni görür)."""
+        v = self.get(vid)
+        if not valid_variant(variant):
+            raise ValueError("geçersiz mod")
+        if not chunk_ready(v, k, variant):
+            raise RuntimeError("Bu bölümün dublajı henüz hazır değil.")
+        cur = self.job.current if self.job and self.job.variant == variant and self.job.video.id == vid else None
+        if cur and cur.get("chunk") == k:
+            raise RuntimeError("Bu bölüm şu anda dublajlanıyor; bitince düzenleyebilirsiniz.")
+        c = v.by_id(k)
+        d = v.dir / f"c{k:03d}"
+        segs = (load_json(d / fname(variant, "asr.json"), {}) or {}).get("segments", [])
+        if not 0 <= j < len(segs):
+            raise ValueError("cümle bulunamadı")
+        trp = d / fname_mt(variant, "tr.json")
+        trj = load_json(trp, {}) or {}
+        tr, _ = tr_list(trj, variant)
+        tr += [""] * (len(segs) - len(tr))
+        raw = dub_file(strip_mix(variant))              # işlenmemiş dublaj üzerinde düzenlenir, sonra yeniden işlenir
+        rawj = d / (raw[:-4] + ".json")
+        if not (d / raw).exists():
+            raw = dub_file(variant)
+            rawj = d / (raw[:-4] + ".json")
+        dj = load_json(rawj, {}) or {}
+        voices = list(dj.get("voices") or ["kadin"] * len(segs))
+        timings = list(dj.get("timings") or [None] * len(segs))
+        voices += [voices[-1] if voices else "kadin"] * (len(segs) - len(voices))
+        timings += [None] * (len(segs) - len(timings))
+        t = dub_tts(variant)
+        emos = None
+        if uses_emotion(variant):
+            emos = list(dj.get("emotions") or (load_json(d / fname(variant, "emotion.json"), {}) or {}).get("labels")
+                        or ["neutral"] * len(segs))
+            emos += ["neutral"] * (len(segs) - len(emos))
+
+        text = (opts.get("tr") if opts.get("tr") is not None else tr[j]).strip()
+        if not text:
+            raise ValueError("Metin boş olamaz.")
+        say = (opts.get("say") or "").strip()
+        emo = opts.get("emotion") or (emos[j] if emos else None)
+        if emos is not None and emo in E.EMOTIONS:
+            emos[j] = emo
+        if opts.get("voice") in ("kadin", "erkek") and t in ("std", "cepant", "ahenkant"):
+            voices[j] = opts["voice"]
+        speed = float(np.clip(float(opts.get("speed") or 1.0), 0.7, 1.4))
+        seed = random.randint(1, 1_000_000) if opts.get("new_seed") else int(dj.get("seed", 0)) + j
+        steps = int(dj.get("steps") or fixed_steps(variant) or STEP_DEFAULT.get(t, 10))
+
+        # sese giden metin: elle verilen okunuş, yoksa (açıksa) İngilizce adların Türkçe okunuşu
+        pron_j = []
+        if say:
+            spoken = say
+        else:
+            spoken = text
+            flags = pron_of(variant)
+            if flags:
+                import telaffuz
+                spoken, pron_j = telaffuz.transform(text, segs[j].get("en", ""), E.MODELS, "cmu" in flags, "g2p" in flags)
+
+        dur = c["end"] - c["start"]
+        items = [{"start": s["start"], "end": s["end"], "tr": spoken if i == j else "", "en": s.get("en", "")}
+                 for i, s in enumerate(segs)]
+        voc_f = d / fname(variant, "vocals.wav")
+        noop = lambda *a, **kw: None                                    # noqa: E731
+        work = d / "_resay"
+        work.mkdir(exist_ok=True)
+        try:
+            if t == "vox":
+                tr_, tm = self.engine.dub_vox(items, voc_f, voices, dur, 0, noop, seed=seed, work=work, steps=steps,
+                                              accent=vox_accent(variant), emotions=emos)
+            elif t in AHENK_TTS:
+                pair = t in ("cepant", "ahenkant")
+                tr_, tm = self.engine.dub_ahenk(items, voc_f, emos or [], dur, 0, noop, seed=seed, work=work,
+                                                steps=steps, big=t in ("ahenk", "ahenkant"),
+                                                voices=voices if pair else None)
+            else:
+                who = [TTS_VOICE[t]] * len(voices) if t in TTS_VOICE else voices
+                tr_, tm = self.engine.dub(items, who, dur, 0, noop, seed=seed)
+            if not tm[j]:
+                raise RuntimeError("Seslendirme ses üretmedi.")
+            sr = E.DUB_SR
+            a = tr_[int(tm[j][0] * sr): int(tm[j][1] * sr)].astype(np.float32)
+            if abs(speed - 1.0) > 0.01:                                 # kullanıcının istediği hız (perde korunur)
+                a = E.atempo(a, sr, speed, work)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+        # parçanın dublaj sesine yerleştir: eski okuma silinir, yenisi önceki cümle bittikten sonra başlar
+        track, tsr = E.read_wav(d / raw)
+        track = track.mean(axis=1) if track.ndim > 1 else track
+        track = E.resample(track, tsr, E.DUB_SR) if tsr != E.DUB_SR else track
+        sr = E.DUB_SR
+        old = timings[j]
+        ref = 0.0
+        if old:
+            o0, o1 = int(old[0] * sr), int(old[1] * sr)
+            ref = E.active_rms(track[o0:o1], sr)
+            track[o0:o1] = 0.0
+        if ref <= 0:                                                   # eski okuma yoksa parçanın genel seviyesi
+            ref = E.active_rms(track, sr)
+        cur_rms = E.active_rms(a, sr)
+        if ref > 0 and cur_rms > 0:
+            a = a * float(np.clip(ref / cur_rms, 0.2, 5.0))
+        prev_end = max([x[1] for x in timings[:j] if x] or [0.0])
+        start = max(float(segs[j]["start"]), prev_end + 0.05 if prev_end > 0 else 0.0)
+        i0 = int(start * sr)
+        if i0 + len(a) > len(track):
+            track = np.concatenate([track, np.zeros(i0 + len(a) - len(track), dtype=np.float32)])
+        track[i0:i0 + len(a)] += a
+        peak = float(np.abs(track).max() or 1.0)
+        if peak > 0.98:
+            track *= 0.98 / peak
+        E.write_wav(d / raw, track, sr)
+
+        timings[j] = [round(start, 3), round(start + len(a) / sr, 3)]
+        tr[j] = text
+        pe = pe_of(variant)
+        if pe:                                   # iyileştirilmiş metin düzenlendi; ilk çeviri olduğu gibi kalır
+            tr0 = list(trj.get("tr", [])) + [""] * (len(segs) - len(trj.get("tr", [])))
+            if text != tr0[j] or (trj.get("pe") or {}).get(pe):
+                save_json(trp, {**trj, "tr": tr0, "pe": {**(trj.get("pe") or {}), pe: tr}})
+        else:
+            save_json(trp, {**trj, "tr": tr})
+        dj.update(voices=voices, timings=timings)
+        if emos is not None:
+            dj["emotions"] = emos
+            ep = d / fname(variant, "emotion.json")
+            ej = load_json(ep, {}) or {}
+            if ej.get("labels") and j < len(ej["labels"]):
+                ej["labels"][j] = emos[j]
+                save_json(ep, ej)
+        if pron_of(variant) or dj.get("pron"):
+            pr = list(dj.get("pron") or [[] for _ in segs])
+            pr += [[] for _ in range(len(segs) - len(pr))]
+            pr[j] = pron_j if not say else ([[text, say]] if say != text else [])
+            dj["pron"] = pr
+        edits = dict(dj.get("edits", {}))
+        edits[str(j)] = {"say": say, "speed": speed, **({"emotion": emos[j]} if emos else {}), "voice": voices[j]}
+        dj["edits"] = edits
+        save_json(rawj, dj)
+        if mix_of(variant) and raw != dub_file(variant):
+            self._apply_mix(d, variant, voc_f)
+        nxt = next((x for x in timings[j + 1:] if x), None)
+        info = self.chunk_info(vid, variant, k)
+        info["overlap"] = bool(nxt and timings[j][1] > nxt[0] + 0.05)
+        return info
 
     # ---- dışa aktarma
     EXPORT_KINDS = {"video": "Video (MP4)", "dub": "Yalnız dublaj sesi", "en": "Yalnız İngilizce ses",
@@ -715,6 +1062,8 @@ class Manager:
         if kind == "video" and getattr(self.get(vid), "youtube", None):
             raise RuntimeError("YouTube videolarında görüntü indirilmediği için video (MP4) dışa aktarılamaz; "
                                "sesleri WAV olarak dışa aktarabilirsiniz.")
+        if variant.startswith("hist:"):
+            raise RuntimeError("Geçmişteki bir ses dışa aktarılamaz; önce “Şimdiki” sese dönün.")
         if self.export_state.get("running"):
             raise RuntimeError("Önceki dışa aktarma sürüyor.")
         v = self.get(vid)
@@ -743,6 +1092,7 @@ class Manager:
                 g = {c: float(gains.get(c, 1.0)) for c in ("dub", "bg", "en")}
                 tmp = v.dir / "_export_mix.wav"
                 self._mix_to_wav(v, variant, g, tmp, lambda p: st.update(progress=p * 0.7))
+                self._export_loudness(v, variant, tmp)
                 st["progress"] = 75.0
                 part = out.with_name(out.stem + ".part" + out.suffix)
                 ra, rb = v.range
@@ -768,6 +1118,8 @@ class Manager:
                     g = {c: float(gains.get(c, 1.0)) for c in ("dub", "bg", "en")}
                 part = out.with_name(out.stem + ".part.wav")
                 self._mix_to_wav(v, variant, g, part, lambda p: st.update(progress=p * 0.99))
+                if kind == "all":
+                    self._export_loudness(v, variant, part)
                 os.replace(part, out)
             st.update(progress=100.0, done=True)
         except Exception as e:  # noqa: BLE001
@@ -775,6 +1127,16 @@ class Manager:
             st["error"] = str(e)
         finally:
             st["running"] = False
+
+    @staticmethod
+    def _export_loudness(v: Video, variant: str, path: Path) -> None:
+        """Loudness standardı açıksa son karışım −16 LUFS / −1,5 dBTP (internet standardı)"""
+        if "mixl" not in mix_of(variant):
+            return
+        import ses_isleme
+        tmp = path.with_name(path.stem + ".lufs.wav")
+        E.ffmpeg("-i", path, "-af", ses_isleme.EXPORT_LUFS, "-ar", "48000", "-ac", "2", tmp)
+        os.replace(tmp, path)
 
     def _mix_to_wav(self, v: Video, variant: str, gains: dict, dst: Path, prog) -> None:
         """Seçili aralıktaki parça seslerini 48 kHz stereo tek dosyada birleştirir (bellekte tek parça tutar).
@@ -947,7 +1309,8 @@ class Manager:
                                                       "end": round(sg[i]["end"] - off, 3)} for i in idx]})
                 for name, trj in trs.items():
                     tr = trj.get("tr", [])
-                    save_json(dd / name, {"tr": [tr[i] if i < len(tr) else "" for i in idx]})
+                    pes = {k_: [v_[i] if i < len(v_) else "" for i in idx] for k_, v_ in (trj.get("pe") or {}).items()}
+                    save_json(dd / name, {"tr": [tr[i] if i < len(tr) else "" for i in idx], **({"pe": pes} if pes else {})})
                 if spj is not None:
                     em = spj.get("emb", [])
                     save_json(dd / sname, {"emb": [em[i] if i < len(em) else None for i in idx]})
@@ -1023,6 +1386,16 @@ class Manager:
             if job.cancel or self.job is not job:
                 raise _Cancelled()
 
+        def heir(key):
+            """İş iptal edildiyse: bu aşama yerine başlayan işle ortaksa o iş (aşama bitirilir), değilse None"""
+            nj = job.carry_to
+            while nj is not None and nj is not self.job:     # art arda değiştirildiyse en son iş
+                nj = nj.carry_to
+            if (nj is None or job.stopped or nj.cancel or nj.video is not v or not any(c["i"] == k for c in v.chunks)
+                    or stage_sig(key, job.variant) != stage_sig(key, nj.variant)):
+                return None
+            return nj
+
         tinfo = {}                           # aşama süresi: indirme / yükleme beklemesi hariç
 
         def stage(key):
@@ -1032,7 +1405,13 @@ class Manager:
 
             def on(status, progress, detail=""):
                 if job.cancel:
-                    raise _Cancelled()
+                    nj = heir(key)
+                    if nj is None:
+                        raise _Cancelled()
+                    if nj.current is None or nj.current.get("carried"):   # ekranda yeni işin durumu olarak görünsün
+                        nj.current = {**job.current, "carried": True}
+                        nj.chunk_t0 = nj.chunk_t0 or job.chunk_t0
+                        nj.stage_state.setdefault(k, {})[key] = (status, float(progress), detail)
                 now = time.time()
                 if ti["last"] and ti["last"][0] == "indiriliyor":
                     ti["dl"] += now - ti["last"][1]
@@ -1155,12 +1534,32 @@ class Manager:
             trj = {"tr": tr}
         tr = trj["tr"]
 
+        # 3b) çeviri iyileştirme (Gelişmiş): ilk çeviri "tr"de kalır, düzeltilmiş hâli "pe"de modele göre
+        pe = pe_of(variant)
+        if pe:
+            check()
+            on = stage("refine")
+            got = (trj.get("pe") or {}).get(pe)
+            if got and len(got) == len(tr):
+                done("refine", True)
+            else:
+                t0 = time.time()
+                got = self.engine.refine([s["en"] for s in segs], tr, [s["end"] - s["start"] for s in segs], on, pe) \
+                    if segs else []
+                trj = {**load_json(FM("tr.json"), {}), "tr": tr}
+                trj["pe"] = {**(trj.get("pe") or {}), pe: got}
+                save_json(FM("tr.json"), trj)
+                ch = sum(1 for a, b in zip(tr, got) if a != b)
+                done("refine", detail=f"{ch}/{len(tr)} cümle düzeltildi · {time.time() - t0:.0f} sn")
+            tr = got
+
         # 4) dubbing
         check()
         on = stage("dub")
-        raw = dub_file(variant)
+        final = dub_file(variant)
+        raw = dub_file(strip_mix(variant))              # işlenmemiş dublaj (ses işleme yoksa ikisi aynı dosya)
         rawj = d / (raw[:-4] + ".json")
-        if (d / raw).exists() and rawj.exists():
+        if ((d / raw).exists() and rawj.exists()) or ((d / final).exists() and (d / (final[:-4] + ".json")).exists()):
             done("dub", True)
         else:
             t0 = time.time()
@@ -1181,7 +1580,8 @@ class Manager:
             t = dub_tts(variant)
             if t == "vox":                             # her cümle kendi İngilizce sesinden kopyalanır (duygu dahil)
                 track, timings = self.engine.dub_vox(items, voc_f, voices, dur, target, on, seed=job.seed, work=d,
-                                                     steps=job.vox_steps)
+                                                     steps=job.vox_steps, accent=vox_accent(variant),
+                                                     emotions=emotions)
             elif t in AHENK_TTS:                       # Ahenk algılanan duyguyla; çiftlerde erkekleri Antalia okur
                 pair = t in ("cepant", "ahenkant")
                 track, timings = self.engine.dub_ahenk(items, voc_f, emotions or [], dur, target, on,
@@ -1192,8 +1592,22 @@ class Manager:
                 track, timings = self.engine.dub(items, who, dur, target, on, seed=job.seed)
             E.write_wav(d / raw, track, E.DUB_SR)
             save_json(rawj, {"voices": voices, "timings": timings, **({"emotions": emotions} if emotions else {}),
-                             **({"pron": pron} if pron else {})})
+                             **({"pron": pron} if pron else {}), "steps": job.vox_steps, "seed": job.seed})
             done("dub", detail=f"{time.time() - t0:.0f} sn")
+
+        # 4b) ses işleme (Gelişmiş · stüdyo miksi): işlenmemiş dublajdan
+        mx = mix_of(variant)
+        if mx:
+            check()
+            on = stage("mix")
+            finalj = d / (final[:-4] + ".json")
+            if (d / final).exists() and finalj.exists():
+                done("mix", True)
+            else:
+                t0 = time.time()
+                on("calisiyor", 10, ", ".join(MIX_FLAGS[f] for f in mx))
+                self._apply_mix(d, variant, voc_f)
+                done("mix", detail=f"{time.time() - t0:.1f} sn")
 
         if not job.buffering and dur > 150.0:          # tek parça işlendi → oynatma için dilimle
             check()
